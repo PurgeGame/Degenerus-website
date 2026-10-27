@@ -110,7 +110,7 @@
   <!-- Phone section pager + bottom dock. Blocking: it hides inactive pages
        and styles the static dock markup at first paint. -->
   <link rel="stylesheet" href="/app/styles/mobile-pager.css">
-  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=bottom-bar-20261025">
+  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=loading-baf-20261027">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -129,7 +129,6 @@
   <script type="importmap">
   {
     "imports": {
-      "/app/app/jackpot-sfx.js": "/app/app/jackpot-sfx.js?v=auto-reveal-audio-20261027",
       "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-31ca6fdd-p7a-v6-result-card-20261012",
       "/app/components/app-all-in-dialog.js": "/app/components/app-all-in-dialog.js?v=degenerette-cards-20261003",
       "/app/app/boons.js": "/app/app/boons.js?v=degenerette-cards-20261003",
@@ -149,8 +148,9 @@
       "/app/app/button-feedback.js": "/app/app/button-feedback.js?v=reveal-efficiency-20261004",
       "/app/components/dgn-winnings.js": "/app/components/dgn-winnings.js?v=reveal-efficiency-20261004",
       "/app/components/dgn-pop-board.js": "/app/components/dgn-pop-board.js?v=auto-reveal-audio-20261027",
+      "/app/app/jackpot-sfx.js": "/app/app/jackpot-sfx.js?v=auto-reveal-audio-20261027",
       "/app/app/pack-watch.js": "/app/app/pack-watch.js?v=next-rng-only-20260930",
-      "/app/app/main.js": "/app/app/main.js?v=next-rng-only-20260930",
+      "/app/app/main.js": "/app/app/main.js?v=loading-baf-20261027",
       "/app/app/mine-flip.js": "/app/app/mine-flip.js?v=mining-reward-20261003",
       "/app/app/ui-preferences.js": "/app/app/ui-preferences.js?v=blur-balances-20261006",
       "/app/app/craps.js": "/app/app/craps.js?v=table-abi-20261027",
@@ -161,12 +161,12 @@
       "/app/components/last-day-jackpot.js": "/app/components/last-day-jackpot.js?v=day-summary-craps-20260930",
       "/app/components/app-craps-entry.js": "/app/components/app-craps-entry.js?v=result-card-20261012",
       "/app/components/app-craps-rules.js": "/app/components/app-craps-rules.js?v=main-event-20260929",
-      "/app/components/app-tickets-inventory.js": "/app/components/app-tickets-inventory.js?v=deity-liquidation-20261008",
+      "/app/components/app-tickets-inventory.js": "/app/components/app-tickets-inventory.js?v=loading-baf-20261027",
       "/app/components/app-transaction-history.js": "/app/components/app-transaction-history.js?v=degenerette-cards-20261003",
       "/app/components/app-affiliate-panel.js": "/app/components/app-affiliate-panel.js?v=share-link-20260928",
       "/app/chain/history.js": "/app/chain/history.js?v=category-history-20260928",
       "/app/chain/facts.js": "/app/chain/facts.js?v=startup-efficiency-20261004",
-      "/app/chain/client.js": "/app/chain/client.js?v=startup-efficiency-20261004",
+      "/app/chain/client.js": "/app/chain/client.js?v=loading-baf-20261027",
       "ethers": "/app/vendor/ethers-app.mjs?v=p7a-20261023",
       "/app/vendor/ethers-app.mjs": "/app/vendor/ethers-app.mjs?v=p7a-20261023",
       "gsap": "/app/vendor/gsap.mjs",
@@ -194,13 +194,12 @@
       "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-31ca6fdd-p7a-v6-final-ranks-20261010",
       "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-31ca6fdd-p7a-v6-final-ranks-20261010",
       "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-31ca6fdd-p7a-v6-final-ranks-20261010",
-      "/app/craps/coin-draw-viewer.js": "/app/craps/coin-draw-viewer.js?v=craps-31ca6fdd-p7a-v6-result-card-20261012",
       "/app/app/coin-draw-centre.js": "/app/app/coin-draw-centre.js?v=craps-battle-outcome-20261004",
-      "/app/chain/jackpots.js": "/app/chain/jackpots.js?v=decimator-entries-20261006",
+      "/app/chain/jackpots.js": "/app/chain/jackpots.js?v=loading-baf-20261027",
       "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=auto-reveal-audio-20261027",
       "/app/app/jackpot-buckets.js": "/app/app/jackpot-buckets.js?v=decimator-entries-20261006",
       "/app/app/day-summary-prizes.js": "/app/app/day-summary-prizes.js?v=decimator-entries-20261006",
-      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=responsive-pop-20261009",
+      "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=loading-baf-20261027",
       "/app/components/app-craps-table.js": "/app/components/app-craps-table.js?rev=result-card-20261012",
       "/app/components/app-decimator-battle.js": "/app/components/app-decimator-battle.js?v=decimator-skin-20261006",
       "/app/craps/decimator-table.js": "/app/craps/decimator-table.js?v=decimator-cutoff-20261006",
@@ -210,7 +209,14 @@
       "/app/app/decimator-draw-data.js": "/app/app/decimator-draw-data.js?v=decimator-battle-20261006",
       "/app/components/bubble-reveal.js": "/app/components/bubble-reveal.js?v=compositor-pop-20261009",
       "/app/components/win-flights.js": "/app/components/win-flights.js?v=batched-measurements-20260930",
-      "@walletconnect/ethereum-provider": "/app/vendor/walletconnect.mjs"
+      "@walletconnect/ethereum-provider": "/app/vendor/walletconnect.mjs",
+      "/app/chain/event-store.js": "/app/chain/event-store.js?v=loading-baf-20261027",
+      "/app/chain/logical-days.js": "/app/chain/logical-days.js?v=loading-baf-20261027",
+      "/app/chain/replay.js": "/app/chain/replay.js?v=loading-baf-20261027",
+      "/app/components/app-jackpot-resolutions.js": "/app/components/app-jackpot-resolutions.js?v=loading-baf-20261027",
+      "/app/components/app-baf-eve.js": "/app/components/app-baf-eve.js?v=loading-baf-20261027",
+      "/app/app/degenesis.js": "/app/app/degenesis.js?v=loading-baf-20261027",
+      "/app/app/desktop-info-rail.js": "/app/app/desktop-info-rail.js?v=loading-baf-20261027"
     }
   }
   </script>
@@ -681,8 +687,8 @@
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/app/mobile-pager.js"></script>
   <script type="module" src="/app/app/desktop-sections.js"></script>
-  <script type="module" src="/app/app/desktop-info-rail.js"></script>
-  <script type="module" src="/app/app/main.js?v=next-rng-only-20260930"></script>
+  <script type="module" src="/app/app/desktop-info-rail.js?v=loading-baf-20261027"></script>
+  <script type="module" src="/app/app/main.js?v=loading-baf-20261027"></script>
   <script type="module" src="/app/components/app-referral-input.js"></script>
   <script type="module" src="/app/components/app-sound-toggle.js"></script>
   <script type="module" src="/app/components/app-feedback-button.js"></script>
@@ -695,7 +701,7 @@
   <script type="module" src="/app/components/view-mode-banner.js"></script>
   <script type="module" src="/app/components/gold-rush-headline.js?v=tutorial-fixtures-13"></script>
   <script type="module" src="/app/components/app-pool-progress.js?v=decimator-battle-20260930"></script>
-  <script type="module" src="/app/components/replay-panel.js?v=responsive-pop-20261009"></script>
+  <script type="module" src="/app/components/replay-panel.js?v=loading-baf-20261027"></script>
   <script type="module" src="/app/components/last-day-jackpot.js?v=day-summary-craps-20260930"></script>
   <script type="module" src="/app/components/app-mine-flip.js?v=mine-flip-setting-20261006"></script>
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
@@ -740,7 +746,7 @@
       '/app/components/app-daily-flip.js',
     ];
     // Phone inventory and game modules load on their section's first visit.
-    // Desktop banner panels warm in idle batches after the opening panel.
+    // Desktop banner panels load when selected so hidden history scans do not delay the draw.
     const MOBILE_MORE_MODULES = new Set([
       '/app/components/app-tickets-inventory.js',
       '/app/components/app-wwxrp-burn.js',
@@ -835,8 +841,9 @@
     const INFO_MODULES = new Set(VIEWPORT_MODULES
       .filter(([selector]) => document.querySelector(selector)?.closest('[data-info-slide]'))
       .map(([, src]) => src));
-    const moduleNeededInBackground = (src) => moduleNeededNow(src)
-      || (!phonePages.matches && INFO_MODULES.has(src));
+    // Hidden slides can begin large history scans on upgrade. Their navigation
+    // event already loads them on demand; keep those reads off the first draw.
+    const moduleNeededInBackground = (src) => moduleNeededNow(src);
     // A hard reload only applies its cache bypass to navigation-time fetches.
     // These modules arrive later from an idle callback, so reused Firefox and
     // Chromium profiles can otherwise keep different pre-edit generations of
