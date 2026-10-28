@@ -10,6 +10,25 @@ body.layout-basic app-records-rail {
   margin: 0 0 clamp(1rem, 3vw, 1.5rem);
 }
 
+.records-rail__loading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem;
+  min-height: 3rem;
+  color: #c6b79f;
+  font: 600 .8rem/1.4 Inter, sans-serif;
+}
+.records-rail__loading button {
+  padding: .35rem .7rem;
+  border: 1px solid #92724288;
+  border-radius: 4px;
+  background: #31261c;
+  color: #ffe3a0;
+  font: inherit;
+}
+
 /* panels.css uses content-visibility:auto for this below-the-fold host. That
    containment would turn a fixed descendant into a rail-sized, clipped strip.
    Release it while either bounty panel is open. */

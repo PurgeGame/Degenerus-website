@@ -97,7 +97,7 @@
   <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" data-deferred-css>
   <link rel="stylesheet" data-href="/app/styles/craps-table.css" data-rev="winner-summary-20261028">
   <link rel="stylesheet" data-href="/app/styles/baf-eve.css">
-  <link rel="stylesheet" data-href="/app/styles/records-rail.css">
+  <link rel="stylesheet" data-href="/app/styles/records-rail.css" data-rev="local-bounties-20261028">
   <link rel="stylesheet" data-href="/app/styles/baf-resolution.css">
   <link rel="stylesheet" href="/app/styles/jackpot-processing.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/status-indicators.css?v=quest-overflow-20261006">
@@ -110,7 +110,8 @@
   <!-- Phone section pager + bottom dock. Blocking: it hides inactive pages
        and styles the static dock markup at first paint. -->
   <link rel="stylesheet" href="/app/styles/mobile-pager.css">
-  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=quest-growth-slot-20261027">
+  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=bounty-art-restored-20261028">
+  <link rel="stylesheet" href="/app/styles/token-tools.css?v=token-grid-20261028">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -136,14 +137,14 @@
       "/app/app/badge-sprite.js": "/app/app/badge-sprite.js?v=fixed-neon-wild-20261010",
       "/app/app/lootbox.js": "/app/app/lootbox.js?v=foil-guard-20261008",
       "/app/app/degenerette.js": "/app/app/degenerette.js?v=stake-units-20261008",
-      "/app/app/records.js": "/app/app/records.js?v=degenerette-cards-20261003",
+      "/app/app/records.js": "/app/app/records.js?v=local-bounties-20261028",
       "/app/app/dgn-reels.js": "/app/app/dgn-reels.js?v=degenerette-cards-20261003",
-      "/app/components/app-records-rail.js": "/app/components/app-records-rail.js?v=degenerette-cards-20261003",
+      "/app/components/app-records-rail.js": "/app/components/app-records-rail.js?v=local-bounties-20261028",
       "/app/components/app-box-strip.js": "/app/components/app-box-strip.js?v=pending-deployment-scope-20261001",
       "/app/app/bingo-watch.js": "/app/app/bingo-watch.js?v=pending-recent-receipts-20261001",
       "/app/components/app-sdgnrs-redemptions.js": "/app/components/app-sdgnrs-redemptions.js?v=pending-deployment-scope-20261001",
       "/app/app/lootbox-legs.js": "/app/app/lootbox-legs.js?v=scoped-box-replays-20261009",
-      "/app/components/app-sdgnrs-burn-rail.js": "/app/components/app-sdgnrs-burn-rail.js?v=larger-flames-20261002",
+      "/app/components/app-sdgnrs-burn-rail.js": "/app/components/app-sdgnrs-burn-rail.js?v=token-grid-20261028",
       "/app/app/sacrifices.js": "/app/app/sacrifices.js?v=larger-flames-20261002",
       "/app/app/button-feedback.js": "/app/app/button-feedback.js?v=reveal-efficiency-20261004",
       "/app/components/dgn-winnings.js": "/app/components/dgn-winnings.js?v=reveal-efficiency-20261004",
@@ -176,7 +177,8 @@
       "lean-qr": "/app/vendor/lean-qr.mjs",
       "/app/components/gold-rush-headline.js": "/app/components/gold-rush-headline.js?v=tutorial-fixtures-13",
       "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=decimator-battle-20260930",
-      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=purchase-polish-20261027",
+      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=token-grid-20261028",
+      "/app/components/app-token-funds.js": "/app/components/app-token-funds.js?v=token-grid-20261028",
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
       "/app/components/app-sacrifice-panel.js": "/app/components/app-sacrifice-panel.js?v=boon-tooltip-fit-20261001",
       "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=purchase-polish-20261027",
@@ -523,7 +525,8 @@
         <app-tickets-inventory data-info-slide="tickets"></app-tickets-inventory>
       </section>
 
-      <section class="bottom-tools" data-mpage="more" data-info-slide="tokens" aria-label="Token tools and charity">
+      <section class="bottom-tools" data-mpage="more" data-info-slide="tokens" aria-label="Token balances, funding, and charity">
+        <app-token-funds></app-token-funds>
         <app-wwxrp-burn hidden></app-wwxrp-burn>
         <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
       </section>
@@ -789,6 +792,7 @@
       '/app/components/app-tickets-inventory.js',
       '/app/components/app-wwxrp-burn.js',
       '/app/components/app-sdgnrs-burn-rail.js',
+      '/app/components/app-token-funds.js',
     ]);
     const phonePages = window.matchMedia('(max-width: 1099px)');
     const moduleNeededNow = (src) => {
@@ -840,6 +844,7 @@
       '/app/components/app-baf-eve.js',
       '/app/components/app-tickets-inventory.js',
       '/app/components/app-sdgnrs-burn-rail.js',
+      '/app/components/app-token-funds.js',
       '/app/components/app-reveal-tray.js',
       '/app/components/app-box-strip.js',
       '/app/components/app-sdgnrs-redemptions.js',
@@ -875,6 +880,7 @@
       ['app-tickets-inventory', '/app/components/app-tickets-inventory.js'],
       ['.quest-hub', '/app/components/app-parimutuel-panel.js'],
       ['.bottom-tools', '/app/components/app-sdgnrs-burn-rail.js'],
+      ['.bottom-tools', '/app/components/app-token-funds.js'],
     ];
     const INFO_MODULES = new Set(VIEWPORT_MODULES
       .filter(([selector]) => document.querySelector(selector)?.closest('[data-info-slide]'))
