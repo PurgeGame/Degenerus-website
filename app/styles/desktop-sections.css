@@ -631,8 +631,8 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-slot-reward-extra { font-size: .6rem; }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub__rewards { align-content: center; }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub .pari-book { min-height: 0; height: calc(var(--info-panel-height) - .5rem); padding: .35rem .5rem .5rem; row-gap: .15rem; }
-  body.layout-basic[data-desktop-page] .info-rail .quest-hub:not(:has(.has-live-book, .pari-error:not([hidden]))) { grid-template-columns: minmax(0, 1fr); }
-  body.layout-basic[data-desktop-page] .info-rail .quest-hub:not(:has(.has-live-book, .pari-error:not([hidden]))) .quest-hub__rewards { display: none; }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub:not(:has([data-growth-bettable="true"], .pari-error:not([hidden]))) { grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub:not(:has([data-growth-bettable="true"], .pari-error:not([hidden]))) .quest-hub__rewards { display: none; }
   body.layout-basic[data-desktop-page] .info-rail .qst-score-pop { position: fixed; top: auto; bottom: calc(var(--info-rail-height) + .5rem); width: min(26rem, calc(100vw - 2rem)); }
 }
 

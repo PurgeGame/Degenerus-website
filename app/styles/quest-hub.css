@@ -68,7 +68,8 @@ body.layout-basic .play-grid .quest-hub .qst-meter { height: .25rem; }
 
 body.layout-basic .play-grid .quest-hub__rewards { display: grid; gap: .375rem; min-width: 0; }
 body.layout-basic .play-grid .quest-hub .side-bets-rail { margin: 0; min-width: 0; }
-body.layout-basic .play-grid .quest-hub .side-bets-rail:not(:has(.has-live-book, .pari-error:not([hidden]))) { display: none; }
+body.layout-basic .play-grid .quest-hub .side-bets-rail:not(:has([data-growth-bettable="true"], .pari-error:not([hidden]))) { display: none; }
+body.layout-basic .play-grid .quest-hub__rewards:has([data-growth-bettable="true"]) > .referral-strip { display: none; }
 body.layout-basic .play-grid .quest-hub .app-parimutuel,
 body.layout-basic .play-grid .quest-hub .pari-bet-container,
 body.layout-basic .play-grid .quest-hub .pari-books {
@@ -362,11 +363,8 @@ body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy
   body.layout-basic .play-grid .quest-hub .qst-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(7rem, 1fr); }
   body.layout-basic .play-grid .quest-hub .qst-slots:not(:has(.qst-slot--level)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.layout-basic .play-grid .quest-hub .qst-slot { grid-column: auto; min-height: 7rem; }
-  body.layout-basic .play-grid .quest-hub__rewards { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
-  body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 6.75rem; }
-  body.layout-basic .play-grid .quest-hub__rewards:not(:has(.has-live-book)) .referral-strip { --utility-height: 3.75rem; }
-  body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card { grid-template-columns: 3.2rem minmax(0, 1fr) var(--ad-stub); }
-  body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card__coin { width: 3.2rem; height: 3.2rem; }
+  body.layout-basic .play-grid .quest-hub__rewards { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 3.75rem; }
 }
 
 body.layout-basic .qst-purchase-prices { display: grid; gap: .25rem; padding: .65rem .8rem; border: 1px solid #7c694b; border-radius: 8px; background: #141b20; font: 700 .8rem/1.3 'Roboto Mono', monospace; }
