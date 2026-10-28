@@ -92,3 +92,9 @@ body.layout-basic .pass-afking__footer .pass-afking__save {
   body.layout-basic .pass-afking__footer .pass-afking__cancel { order: 2; flex: 1 1 100%; }
   body.layout-basic .pass-afking__footer .pass-afking__withdraw { order: 3; flex: 1 1 100%; }
 }
+
+/* The bulk bonus adds ticket entries; the paid quantity still sets the price. */
+body.layout-basic .pass-whale-bulk {
+  color: #b7efb4; border: 1px solid #58845a; border-radius: 4px;
+  padding: .25rem .4rem; background: #17351b80; font-weight: 800;
+}

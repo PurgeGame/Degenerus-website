@@ -372,49 +372,41 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn small { font-size: .8rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn strong { font-size: 1.15rem; }
 
-  /* Reuse the pass desk's actual form nodes, locks and handlers inline. */
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking {
-    display: grid; grid-template-columns: minmax(7rem, .8fr) minmax(18rem, 1.8fr) minmax(10.5rem, 1.1fr) minmax(10rem, 1fr);
-    align-items: center; gap: .65rem; width: 100%; height: 100%; margin: 0; padding: .25rem .65rem;
-    border: 1px solid #36546c; border-radius: 8px; box-shadow: inset 0 1px #c0e2ff0a;
-    background: linear-gradient(110deg, #152b3c, #0e1b29);
+  /* Purchases share the AFKing bar; subscription editing stays in its dialog. */
+  body.layout-basic[data-desktop-page] .info-afking .pass-shop { width: 100%; height: 100%; min-width: 0; padding: .3rem .4rem; box-sizing: border-box; }
+  body.layout-basic[data-desktop-page] .pass-shop__offers { display: flex; gap: .5rem; width: 100%; height: 100%; align-items: stretch; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer {
+    display: flex; flex: 1 1 0; flex-direction: column; align-items: center; justify-content: center;
+    gap: .3rem; min-width: 0; padding: .45rem .5rem; border: 1px solid #476778; border-radius: 7px;
+    background: linear-gradient(145deg, #16333f, #11232e); color: #c6f4e6;
+    font-family: Inter, sans-serif; text-align: center; box-shadow: inset 0 1px #b8dfff15;
   }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__head { display: flex; grid-area: 1 / 1; flex-direction: column; align-items: flex-start; gap: .3rem; padding: 0; border: 0; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-product-heading { display: block; padding: 0; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-section-title { font-size: .62rem; line-height: 1.2; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__current { font-size: .78rem; line-height: 1.25; }
-  body.layout-basic[data-desktop-page] .info-afking :is(.pass-product-sigil, .pass-afking__balance, .pass-afking__topup, .pass-afking__quick > .pass-afking__edit, .pass-afking__dialog-head, .pass-afking__dialog-close, .pass-afking__steth, .pass-afking-error--inline) { display: none; }
-  body.layout-basic[data-desktop-page] .info-afking :is(.pass-afking__quick, .pass-afking__dialog, .pass-afking__dialog-card, .pass-afking__controls, .pass-afking__steth-actions) { display: contents; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-card {
-    grid-template-rows: 14px 48px 12px; align-content: center; gap: 3px;
-    height: 80px; padding: 0 0 0 .65rem; border: 0; border-left: 1px solid #81bef02e;
-    border-radius: 0; background: none; box-shadow: none;
+  body.layout-basic[data-desktop-page] .pass-shop__offer strong { font-size: clamp(.65rem, .9vw, .85rem); line-height: 1.1; letter-spacing: .035em; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer small { color: #9eb1be; font-size: .51rem; line-height: 1.2; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer b { font-size: clamp(.85rem, 1.15vw, 1.15rem); line-height: 1.1; overflow-wrap: anywhere; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer--whale { border-color: #786443; background: linear-gradient(145deg, #3e321e, #251f19); color: #ffe4a3; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer--deity { border-color: #a58a48; background: linear-gradient(145deg, #493a17, #292416); color: #ffe5a0; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer:disabled { opacity: .6; cursor: default; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale {
+    display: grid; flex: 1.65 1 0; min-width: 0; grid-template-columns: minmax(0, 1fr) 5rem;
+    grid-template-rows: minmax(0, 1fr) auto; gap: .3rem;
   }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__order-card { grid-area: 1 / 2; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__deposit-card { grid-area: 1 / 3; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-head > strong { font-size: .8rem; line-height: 14px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__field { gap: 4px; font-size: .55rem; line-height: 12px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__order-fields { grid-template-columns: minmax(0, 1fr) 2.8rem 4.5rem; gap: .35rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__funding-controls { grid-template-columns: minmax(0, 1fr) auto; gap: .35rem; }
-  body.layout-basic[data-desktop-page] .info-afking :is(button, input, select) { min-height: 32px; height: 32px; padding: .3rem .4rem; font-size: .72rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__mode-toggle { padding: 3px; font-size: .57rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__save { width: 100%; min-width: 0; margin: 0; padding: .15rem .2rem; font-size: .63rem; line-height: 1.1; white-space: normal; background: linear-gradient(#3977aa, #245581); border-color: #6da2ce; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer {
-    grid-area: 1 / 4; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: 14px 30px 30px; align-content: center; gap: 3px;
-    height: 80px; margin: 0; padding: 0 0 0 .65rem; border: 0; border-left: 1px solid #81bef02e;
+  body.layout-basic[data-desktop-page] .pass-shop__quantity {
+    display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) 1.5rem; align-content: center; align-items: center;
+    border: 1px solid #6c6040; border-radius: 6px; background: #171a20;
   }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer-title { display: block; grid-column: 1 / -1; color: #e4f2ff; font-size: .8rem; line-height: 14px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer button { width: 100%; min-width: 0; height: 30px; min-height: 30px; margin: 0; padding-inline: .2rem; font-size: .56rem; line-height: 1.2; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__draft-note { display: block; color: #96b0c6; font: 500 .6rem/12px Inter, sans-serif; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__card-detail { font-size: .6rem; line-height: 12px; white-space: nowrap; }
-  body.layout-basic[data-desktop-page] .info-afking :is(.pass-afking__lock, .pass-afking-error--dialog) { grid-column: 1 / -1; margin: 0; padding: .15rem; font-size: .65rem; }
-  body.layout-basic[data-desktop-page] .info-afking [hidden] { display: none !important; }
-}
-
-@media (min-width: 1100px) {
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__status { position: static; align-self: start; font-size: .6rem; }
-  body.layout-basic[data-desktop-page] .info-afking [data-bind="pass-afking-order-note"] { display: none; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity button { min-width: 0; min-height: 32px; padding: 0; border: 0; border-radius: 4px; background: #393428; color: #ffe4a3; font-size: 1rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity output { min-width: 0; font: 700 .8rem/1.1 'Roboto Mono', monospace; text-align: center; color: #fff2cd; }
+  body.layout-basic[data-desktop-page] .pass-shop__bulk { grid-column: 1 / -1; color: #a6edb8; font: 800 clamp(.55rem, .75vw, .7rem)/1.2 Inter, sans-serif; text-align: center; }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription {
+    display: flex; flex: 0 1 12rem; flex-direction: column; align-items: flex-start; justify-content: center;
+    gap: .3rem; min-width: 0; padding: .3rem .5rem; border-left: 1px solid #55708960; color: #c8dbea;
+  }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription > small { color: #94a9ba; font: 700 .55rem/1 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription > strong { font: 800 clamp(.6rem, .8vw, .8rem)/1.2 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription > span { color: #9eb8cb; font: 600 .55rem/1.2 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription > button { min-height: 26px; padding: .25rem .75rem; border: 1px solid #557da0; border-radius: 5px; background: #223f59; color: #e1effa; font: 700 .6rem/1 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .pass-shop [hidden] { display: none !important; }
 }
 
 @media (min-width: 1100px) {
@@ -651,13 +643,8 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
     body.layout-basic[data-desktop-page] .info-rail .sdgnrs-rail .sdgnrs-rail__burn { min-height: 28px; }
   }
 
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking { padding-block: 0; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-card { grid-template-rows: 12px 42px 10px; height: 68px; gap: 2px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__control-head > strong { line-height: 12px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__field { gap: 2px; line-height: 10px; }
-  body.layout-basic[data-desktop-page] .info-afking :is(button, input, select) { min-height: 30px; height: 30px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer { grid-template-rows: 12px 26px 26px; height: 68px; gap: 2px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer-title { line-height: 12px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__footer button { min-height: 26px; height: 26px; }
-  body.layout-basic[data-desktop-page] .info-afking :is(.pass-afking__draft-note, .pass-afking__card-detail) { line-height: 10px; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer { gap: .2rem; padding-block: .25rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription { gap: .2rem; padding-block: 0; }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription > button { min-height: 24px; }
+
 }
