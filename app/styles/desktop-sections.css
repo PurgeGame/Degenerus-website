@@ -252,14 +252,38 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools > :is(app-wwxrp-burn) { flex: 1 1 15rem; width: auto; }
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools > app-sdgnrs-burn-rail { flex: 2 1 28rem; width: auto; }
   body.layout-basic[data-desktop-page] .info-rail .bottom-tools :is(.link-trade-open, .incinerator-summary, .sdgnrs-rail) { width: 100%; min-height: 4rem; }
-  body.layout-basic[data-desktop-page] .info-rail .records-rail { border: 0; background-color: transparent; }
-  /* The dock stays one row even when the bounty rail's container query wraps. */
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__summary { grid-template: 'identity leaders toggle' auto / 8rem minmax(0, 1fr) 1.5rem; }
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__identity { grid-area: identity; }
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__toggle { grid-area: toggle; }
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders { display: grid; grid-area: leaders; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-block: 0; }
+  /* The bounty strip uses the dock's height instead of shrinking poster art. */
+  body.layout-basic[data-desktop-page] .info-rail .records-rail { width: 100%; height: 100%; border: 0; border-radius: 6px; background: linear-gradient(100deg, #2c191b66, #34291c44); box-shadow: none; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail::before { display: none; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__summary { grid-template: 'identity leaders toggle' minmax(0, 1fr) / 7rem minmax(0, 1fr) 1.5rem; height: 100%; box-sizing: border-box; gap: .45rem; padding: .2rem .4rem; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__identity { grid-area: identity; align-self: stretch; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__toggle { grid-area: toggle; height: 100%; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders { display: grid; grid-area: leaders; grid-template-columns: repeat(5, minmax(0, 1fr)); height: 100%; gap: .35rem; margin: 0; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders > *,
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders > :last-child:nth-child(odd) { grid-column: auto; width: 100%; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader {
+    display: grid; grid-template-columns: 1.7rem minmax(0, 1fr); grid-template-rows: 12px minmax(20px, 1fr) 12px 10px;
+    align-items: center; gap: 2px .3rem; height: 100%; aspect-ratio: auto; box-sizing: border-box; padding: .35rem .4rem;
+    border: 0; border-left: 1px solid #92724255; border-radius: 0; background: transparent; text-align: left;
+  }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader:hover { background: #eeb2590c; transform: none; filter: none; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-card-art,
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title > span { display: none; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-presentation { display: contents; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader .records-rail__portrait { position: static; grid-area: 2 / 1; width: 1.7rem; height: 1.7rem; max-height: none; transform: none; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title { position: static; grid-area: 1 / 1 / 2 / -1; display: block; padding: 0; text-align: left; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title > strong { font: 800 clamp(.55rem, .85vw, .75rem)/12px Inter, sans-serif; letter-spacing: .02em; white-space: nowrap; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__bounty-sight { position: static; grid-area: 2 / 2; height: auto; justify-content: flex-start; padding: 0; gap: .2rem; overflow: visible; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__bounty-crosshair { display: none; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-bounty-amount { font: 900 clamp(.75rem, 1.2vw, 1.15rem)/1.1 'Roboto Mono', monospace; color: #ffe3a0; letter-spacing: -.04em; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__bounty-sight::after { content: 'FLIP'; color: #c6aa71; font: 800 .5rem/1 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-bet { position: static; grid-area: 3 / 1 / 4 / -1; border: 0; background: none; box-shadow: none; clip-path: none; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-value { position: static; flex-direction: row; justify-content: flex-start; width: auto; height: auto; padding: 0; gap: .25rem; font-size: .65rem; line-height: 12px; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-value::before { content: 'RECORD'; color: #a99b89; font: 600 .46rem/1 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-amount { width: auto; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-value :is(em, i) { font-size: .47rem; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-strip { position: static; grid-area: 4 / 1 / 5 / -1; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-holder { position: static; display: block; height: auto; padding: 0; font: 600 .52rem/10px Inter, sans-serif; white-space: nowrap; text-align: left; text-overflow: ellipsis; color: #bfb4a4; }
   body.layout-basic[data-desktop-page] .info-rail .app-tickets-inventory { flex: none; width: 100%; }
   body.layout-basic[data-desktop-page] .info-rail .mobile-event-summary { min-height: 80px; height: auto; grid-template-columns: 3.5rem 1fr auto auto; padding: .8rem 1.4rem; gap: 1.2rem; }
   .info-rail .mobile-event-summary__mark { width: 3rem; height: 3rem; }
