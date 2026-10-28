@@ -259,11 +259,35 @@ body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-pieces {
   gap: 0.5rem;
 }
 body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-pieces:has([data-dgx-piece="foil"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-piece { min-height: clamp(6.5rem, 26vw, 10.2rem); }
+body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-piece { --dgx-quote-height: 2.35rem; min-height: clamp(6.5rem, 26vw, 10.2rem); padding: 0; }
 body.layout-basic .dgx-dialog .dgx-shelf--tickets { padding: .35rem .15rem; background: none; border: 0; box-shadow: none; }
-body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-price { font-size: .9rem; }
-body.layout-basic .dgx-dialog .dgx-shelf--tickets:has([data-dgx-piece="foil"]) .dec-ticket-price { font-size: clamp(.62rem, 2.3vw, .84rem); }
-body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art { container-type: size; }
+/* Price headers belong to this popup, independent of the main desk layout. */
+body.layout-basic .dgx-dialog .dgx-ticket-price {
+  position: absolute;
+  z-index: 12;
+  inset: 0 0 auto;
+  display: grid;
+  height: var(--dgx-quote-height);
+  grid-template-columns: max-content max-content;
+  grid-template-rows: .8rem 1.25rem;
+  align-content: start;
+  align-items: baseline;
+  justify-content: center;
+  gap: .12rem .24rem;
+  padding: .1rem 0;
+  color: #fff1c5;
+  font: 800 .9rem/1.1 'Roboto Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+body.layout-basic .dgx-dialog .dgx-ticket-price :is(.dec-price__count, .dec-price__sep) { display: none; }
+body.layout-basic .dgx-dialog .dgx-ticket-price .dec-price__kind { grid-column: 1 / -1; grid-row: 1; color: #cbb98f; font: 800 .53rem/1 Inter, sans-serif; letter-spacing: .08em; text-align: center; }
+body.layout-basic .dgx-dialog .dgx-ticket-price .dec-price__amount { grid-column: 1; grid-row: 2; overflow: visible; text-align: right; text-overflow: clip; white-space: nowrap; }
+body.layout-basic .dgx-dialog .dgx-ticket-price .dec-price__unit { grid-column: 2; grid-row: 2; color: #cbb98f; font-size: .56rem; text-align: left; white-space: nowrap; }
+body.layout-basic .dgx-dialog .dgx-ticket-price__value { display: contents; }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets:has([data-dgx-piece="foil"]) .dgx-ticket-price { font-size: clamp(.62rem, 2.3vw, .84rem); }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece > .dec-ticket-piece__art { inset: var(--dgx-quote-height) .08rem .08rem; container-type: size; }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-foil-limit-stamp { top: calc(var(--dgx-quote-height) + .12rem); }
 body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art > :is(.dec-entry-face, .dec-ticket-face) { width: min(100cqw, 100cqh); height: auto; max-height: 100%; }
 body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art > :is(.dec-pack-face, .dec-foil-pack-face) { width: min(92cqw, 72cqh); height: auto; max-height: 100%; }
 body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-piece--foil.is-selected {
