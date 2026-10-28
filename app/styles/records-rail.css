@@ -31,8 +31,8 @@ body.layout-basic app-records-rail {
 
 /* panels.css uses content-visibility:auto for this below-the-fold host. That
    containment would turn a fixed descendant into a rail-sized, clipped strip.
-   Release it while either bounty panel is open. */
-body.layout-basic app-records-rail:is([data-bounty-dialog-open], [data-bounty-details-open]) {
+   Release it while the bounty dialog is open. */
+body.layout-basic app-records-rail[data-bounty-dialog-open] {
   content-visibility: visible;
 }
 
@@ -81,7 +81,7 @@ body.layout-basic .records-rail__disclosure {
 body.layout-basic .records-rail__summary {
   display: grid;
   min-width: 0;
-  grid-template-columns: 11rem minmax(32rem, 1fr) 1.25rem;
+  grid-template-columns: 11rem minmax(0, 1fr);
   align-items: center;
   gap: 0.5rem;
   padding: 0.46rem 0.58rem;
@@ -455,34 +455,6 @@ body.layout-basic .records-rail__leader-value :is(em, i) {
   letter-spacing: 0.04em;
 }
 
-body.layout-basic .records-rail__toggle {
-  display: grid;
-  width: 1.5rem;
-  height: 2.5rem;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  color: rgba(var(--rec-yellow), 0.82);
-}
-
-body.layout-basic .records-rail__chevron {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg) translate(-2px, -2px);
-  transition: transform 160ms ease;
-}
-
-body.layout-basic .records-rail__toggle[aria-expanded="true"] .records-rail__chevron {
-  transform: rotate(225deg) translate(-2px, -2px);
-}
-
-body.layout-basic .records-rail__toggle:hover { background: #f5a62312; }
-body.layout-basic .records-rail__toggle:focus-visible { outline: 2px solid #f5c56f; outline-offset: 2px; }
 body.layout-basic .records-details-popup {
   --rec-gold: 245, 166, 35; --rec-yellow: 255, 192, 77; --rec-red: 237, 14, 17; --rec-cream: 255, 245, 223;
 }
@@ -1398,10 +1370,10 @@ body.layout-basic :is(
    previous 1280px wrap left a mostly empty logo/pool row above the records. */
 @container records-rail (max-width: 840px) {
   body.layout-basic .records-rail__summary {
-    grid-template-columns: minmax(0, 1fr) 1.5rem;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "identity toggle"
-      "leaders leaders";
+      "identity"
+      "leaders";
   }
 
   body.layout-basic .records-rail__identity { grid-area: identity; }
@@ -1409,7 +1381,6 @@ body.layout-basic :is(
     grid-area: leaders;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  body.layout-basic .records-rail__toggle { grid-area: toggle; }
 
   body.layout-basic .records-rail__leaders > :last-child:nth-child(odd) {
     width: calc((100% - var(--records-leader-gap)) / 2);
@@ -1474,7 +1445,7 @@ body.layout-basic :is(
 
 @container records-rail (max-width: 620px) {
   body.layout-basic .records-rail__summary {
-    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.46rem;
     padding: 0.44rem 0.5rem;
   }
@@ -1489,10 +1460,10 @@ body.layout-basic :is(
 
 @container records-rail (max-width: 430px) {
   body.layout-basic .records-rail__summary {
-    grid-template-columns: minmax(0, 1fr) 1.1rem;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "identity toggle"
-      "leaders leaders";
+      "identity"
+      "leaders";
     gap: 0.38rem;
     padding: 0.42rem 0.46rem;
   }
@@ -1502,10 +1473,10 @@ body.layout-basic :is(
 
 @media (max-width: 840px) {
   body.layout-basic .records-rail__summary {
-    grid-template-columns: minmax(0, 1fr) 1.5rem;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "identity toggle"
-      "leaders leaders";
+      "identity"
+      "leaders";
   }
 
   body.layout-basic .records-rail__identity { grid-area: identity; }
@@ -1513,7 +1484,6 @@ body.layout-basic :is(
     grid-area: leaders;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  body.layout-basic .records-rail__toggle { grid-area: toggle; }
 
   body.layout-basic .records-rail__leaders > :last-child:nth-child(odd) {
     width: calc((100% - var(--records-leader-gap)) / 2);
@@ -1563,7 +1533,7 @@ body.layout-basic :is(
   }
 
   body.layout-basic .records-rail__summary {
-    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.46rem;
     padding: 0.44rem 0.5rem;
   }
@@ -1604,10 +1574,10 @@ body.layout-basic :is(
   }
 
   body.layout-basic .records-rail__summary {
-    grid-template-columns: minmax(0, 1fr) 1.1rem;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "identity toggle"
-      "leaders leaders";
+      "identity"
+      "leaders";
     gap: 0.38rem;
     padding: 0.42rem 0.46rem;
   }

@@ -255,9 +255,8 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   /* The bounty strip uses the dock's height instead of shrinking poster art. */
   body.layout-basic[data-desktop-page] .info-rail .records-rail { width: 100%; height: 100%; border: 0; border-radius: 6px; background: linear-gradient(100deg, #2c191b66, #34291c44); box-shadow: none; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail::before { display: none; }
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__summary { grid-template: 'identity leaders toggle' minmax(0, 1fr) / 7rem minmax(0, 1fr) 1.5rem; height: 100%; box-sizing: border-box; gap: .45rem; padding: .2rem .4rem; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__summary { grid-template: 'identity leaders' minmax(0, 1fr) / 7rem minmax(0, 1fr); height: 100%; box-sizing: border-box; gap: .45rem; padding: .2rem .4rem; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__identity { grid-area: identity; align-self: stretch; }
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__toggle { grid-area: toggle; height: 100%; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders { display: grid; grid-area: leaders; grid-template-columns: repeat(5, minmax(0, 1fr)); height: 100%; gap: .35rem; margin: 0; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders > *,
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders > :last-child:nth-child(odd) { grid-column: auto; width: 100%; }
