@@ -98,3 +98,10 @@ body.layout-basic .pass-whale-bulk {
   color: #b7efb4; border: 1px solid #58845a; border-radius: 4px;
   padding: .25rem .4rem; background: #17351b80; font-weight: 800;
 }
+
+/* Account summary belongs to the desktop bar; the existing pass desk stays compact. */
+body.layout-basic .pass-afking__account { display: none; }
+body.layout-basic .pass-afking__dialog--funding .pass-afking__dialog-card { width: min(26rem, 100%); }
+body.layout-basic .pass-afking__dialog--funding .pass-afking__controls { grid-template-columns: minmax(0, 1fr); }
+body.layout-basic .pass-afking__dialog--funding :is(.pass-afking__order-card, .pass-afking__steth, .pass-afking__lock,
+  .pass-afking__save, .pass-afking__cancel, .pass-afking__withdraw, .pass-afking__dialog-state) { display: none; }
