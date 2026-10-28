@@ -198,7 +198,7 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
     justify-content: flex-start; overflow: auto hidden; padding: .2rem;
   }
   body.layout-basic[data-desktop-page] .info-rail .rrt-action {
-    flex: 0 0 12.5rem; width: 12.5rem; max-width: 16rem; height: var(--rrt-row-height);
+    box-sizing: border-box; flex: 0 0 12.5rem; width: 12.5rem; max-width: 16rem; height: var(--rrt-row-height);
     grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto;
     gap: .3rem .65rem; padding: .4rem .65rem;
     border: 1px solid #6a927d; border-radius: 8px; background: linear-gradient(120deg, #1d302a, #172221); box-shadow: none;
@@ -206,7 +206,7 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .rrt-action__art {
     grid-area: 1 / 1 / 3 / 2; width: 2.75rem; height: 2.75rem;
   }
-  body.layout-basic[data-desktop-page] .info-rail .rrt-action__copy { grid-area: 1 / 2; align-self: end; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action__copy { grid-area: 1 / 2; align-self: end; min-width: 0; min-height: 0; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-ticket-ready__line { gap: .35rem; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-pack-art.rvl-pack { transform: scale(1.1); }
   body.layout-basic[data-desktop-page] .info-rail .rrt-degenerette-ticket { width: 2.75rem; height: 2.75rem; }
@@ -230,8 +230,12 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting { opacity: 1; filter: none; border-color: #645473; background: linear-gradient(120deg, #282132, #201d29); }
   body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting .rrt-action__art { opacity: 1; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting .rrt-action__label { color: #e5daee; }
-  body.layout-basic[data-desktop-page] .info-rail .rrt-action--degenesis .rrt-action__icon-front { width: 3rem; height: 3rem; object-fit: contain; }
-  body.layout-basic[data-desktop-page] .info-rail .rrt-degenesis-summary { display: grid; gap: .2rem; white-space: normal; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action--degenesis { flex-basis: 13.5rem; width: 13.5rem; row-gap: .2rem; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action--degenesis .rrt-action__art { width: 3rem; height: 3rem; background: transparent; box-shadow: none; border: 0; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action--degenesis .rrt-action__icon-front { display: block; width: 3rem; height: 3rem; object-fit: contain; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-degenesis-summary { display: grid; gap: .15rem; white-space: normal; line-height: 1.15; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-degenesis-summary strong { font-size: .9rem; line-height: 1.15; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-degenesis-summary small { font-size: .6rem; line-height: 1.15; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-pending-details:not([hidden]) {
     position: fixed; left: 50%; bottom: calc(var(--info-rail-height) + .5rem);
     transform: translateX(-50%); width: min(50rem, calc(100vw - 2rem));
@@ -270,6 +274,8 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
     height: 100%; box-sizing: border-box;
   }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__identity { grid-area: identity; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__wordmark { width: 100%; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__wordmark img { max-height: min(5rem, calc(var(--info-panel-height) - .75rem)); }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders {
     display: grid; grid-area: leaders; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center;
   }
@@ -392,36 +398,47 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn small { font-size: .8rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn strong { font-size: 1.15rem; }
 
-  /* Aligned pass cards: one price line, with Whale quantity inside its card. */
-  body.layout-basic[data-desktop-page] .info-afking .pass-shop { width: 100%; height: 100%; min-width: 0; padding: .25rem .4rem; box-sizing: border-box; }
-  body.layout-basic[data-desktop-page] .pass-shop__offers { display: flex; gap: .6rem; width: 100%; height: 100%; align-items: stretch; }
-  body.layout-basic[data-desktop-page] .pass-shop__purchases { display: flex; flex: 0 0 auto; align-items: stretch; gap: .4rem; }
+  /* A real shop and setup workspace: benefits stay visible beside the order form. */
+  body.layout-basic[data-desktop-page][data-desktop-info="afking"] { --info-panel-height: 176px; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-shop { width: 100%; height: 100%; min-width: 0; padding: .4rem .5rem; box-sizing: border-box; }
+  body.layout-basic[data-desktop-page] .pass-shop__offers { display: grid; grid-template-columns: 5rem minmax(19rem, 1.05fr) minmax(18rem, 1fr); gap: .65rem; width: 100%; height: 100%; align-items: stretch; }
+  body.layout-basic[data-desktop-page] .pass-shop__offers:has(.pass-shop__offer--lazy:not([hidden])):has(.pass-shop__offer--deity:not([hidden])) { grid-template-columns: 5rem minmax(23rem, 1.25fr) minmax(17.5rem, 1fr); }
+  body.layout-basic[data-desktop-page] .pass-shop__catalog { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: .5rem; min-width: 0; }
+  body.layout-basic[data-desktop-page] .pass-shop__purchases { display: flex; align-items: stretch; gap: .45rem; min-width: 0; }
   body.layout-basic[data-desktop-page] .pass-shop__offer,
   body.layout-basic[data-desktop-page] .pass-shop__whale {
-    box-sizing: border-box; width: clamp(5.5rem, 8vw, 7.25rem); min-width: 0; height: 100%;
-    border: 1px solid #426c6b; border-radius: 8px; background: linear-gradient(155deg, #183735, #111f25);
-    color: #c6f4e6; box-shadow: inset 0 1px #c5fff51a;
+    box-sizing: border-box; flex: 1 1 0; width: auto; min-width: 0; height: 100%;
+    border: 1px solid #416b67; border-radius: 8px; background: linear-gradient(150deg, #193b36, #142522);
+    color: #cbf5e6; box-shadow: inset 0 1px #d2fff017;
   }
   body.layout-basic[data-desktop-page] .pass-shop__offer {
-    display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center;
-    gap: .3rem; min-height: 0; padding: .4rem; font-family: Inter, sans-serif; text-align: center;
+    display: grid; grid-template-rows: 13px 10px 24px 11px 19px; align-content: start; align-items: center; justify-items: center;
+    gap: .1rem; min-height: 0; padding: .4rem; font-family: Inter, sans-serif; text-align: center;
   }
-  body.layout-basic[data-desktop-page] .pass-shop__offer strong { font-size: .65rem; line-height: 1.1; letter-spacing: .025em; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer small { color: #acbabc; font-size: .52rem; line-height: 1.1; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer b { font: 750 .9rem/1.1 'Roboto Mono', monospace; white-space: nowrap; }
-  body.layout-basic[data-desktop-page] .pass-shop__whale { display: grid; grid-template-rows: minmax(0, 1fr) 22px auto; gap: .2rem; padding: .2rem; border-color: #806c46; background: linear-gradient(155deg, #352d20, #211d19); color: #ffe4a3; }
-  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer { width: 100%; border: 0; border-radius: 5px; padding: .1rem; gap: .15rem; background: transparent; color: inherit; box-shadow: none; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer--deity { border-color: #9a8052; background: linear-gradient(155deg, #41321e, #251e1a); color: #ffe5a0; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer:not(:disabled):hover { background-color: #ffffff0b; filter: brightness(1.15); }
-  body.layout-basic[data-desktop-page] .pass-shop__offer:disabled { opacity: .6; cursor: default; }
-  body.layout-basic[data-desktop-page] .pass-shop__quantity { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) 1.5rem; align-items: center; border: 1px solid #6c6040; border-radius: 5px; background: #13171a; }
-  body.layout-basic[data-desktop-page] .pass-shop__quantity button { min-width: 0; height: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 3px; background: #393428; color: #ffe4a3; font-size: 1rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer strong { font-size: .7rem; line-height: 1.15; letter-spacing: .02em; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer small { color: #b4c4bf; font-size: .55rem; line-height: 1.15; letter-spacing: .04em; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer b { margin-top: 0; font: 800 1rem/1.15 'Roboto Mono', monospace; white-space: nowrap; }
+  body.layout-basic[data-desktop-page] .pass-shop__benefit { max-width: 20ch; margin-top: 0; color: #e1ebe6; font: 550 .61rem/1.25 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .pass-shop__rating { color: #b3d6c4; font: 650 .57rem/1.2 Inter, sans-serif; white-space: nowrap; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale { display: grid; grid-template-rows: minmax(0, 1fr) 22px auto; gap: .22rem; padding: .4rem .25rem .25rem; border-color: #8c7547; background: linear-gradient(150deg, #3a3021, #251f18); color: #ffe3a4; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer { width: 100%; border: 0; border-radius: 5px; padding: 0 .2rem; gap: .1rem; background: transparent; color: inherit; box-shadow: none; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__rating { color: #dac89c; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__benefit { margin-top: 0; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer--deity { border-color: #9a8052; background: linear-gradient(150deg, #443421, #2c231a); color: #ffe5a0; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer:not(:disabled):hover { filter: brightness(1.16); }
+  body.layout-basic[data-desktop-page] .pass-shop__offer:disabled { opacity: .7; cursor: default; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) 1.5rem; align-items: center; border: 1px solid #756440; border-radius: 5px; background: #13171a; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity button { min-width: 0; height: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 3px; background: #423929; color: #ffe4a3; font-size: 1rem; }
   body.layout-basic[data-desktop-page] .pass-shop__quantity input { width: 100%; height: 20px; min-height: 20px; padding: 0; border: 0; background: transparent; appearance: textfield; min-width: 0; font: 700 .75rem/1 'Roboto Mono', monospace; text-align: center; color: #fff2cd; }
-  body.layout-basic[data-desktop-page] .pass-shop__bulk { color: #bbccaa; font: 700 .46rem/1.2 Inter, sans-serif; text-align: center; white-space: nowrap; }
-  body.layout-basic[data-desktop-page] .pass-shop__brand { flex: 0 0 2.6rem; align-self: center; padding: 0; border: 0; background: none; box-shadow: none; }
-  body.layout-basic[data-desktop-page] .pass-shop__brand img { display: block; width: 100%; height: auto; }
+  body.layout-basic[data-desktop-page] .pass-shop__bulk { display: block; color: #bfd1aa; font: 700 .48rem/1.2 Inter, sans-serif; text-align: center; white-space: nowrap; }
+  body.layout-basic[data-desktop-page] .pass-shop__brand { align-self: center; width: 5rem; padding: 0; border: 0; background: none; box-shadow: none; }
+  body.layout-basic[data-desktop-page] .pass-shop__brand img { display: block; width: 100%; height: auto; filter: drop-shadow(0 3px 5px #0006); }
+  body.layout-basic[data-desktop-page] .pass-shop__included { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .25rem .6rem; color: #b6c4bd; font: 550 .55rem/1.25 Inter, sans-serif; }
+  body.layout-basic[data-desktop-page] .pass-shop__included strong { color: #839b8c; font-size: .47rem; letter-spacing: .06em; }
+  body.layout-basic[data-desktop-page] .pass-shop__included b { color: #d7e8dc; font-weight: 750; }
+  body.layout-basic[data-desktop-page] .pass-shop__included > span { white-space: nowrap; }
   body.layout-basic[data-desktop-page] .pass-shop__quantity input::-webkit-inner-spin-button { appearance: none; }
-  body.layout-basic[data-desktop-page] .pass-shop__subscription { flex: 1 1 0; min-width: 0; height: 100%; }
+  body.layout-basic[data-desktop-page] .pass-shop__subscription { min-width: 0; height: 100%; }
   body.layout-basic[data-desktop-page] .pass-shop [hidden] { display: none !important; }
   /* The bar shows the account; editing and deposits open their own dialog. */
   body.layout-basic[data-desktop-page] .info-afking .pass-afking {
@@ -463,8 +480,8 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) { border-color: #3b6966; background: linear-gradient(110deg, #153531, #12252a); }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__current { color: #eefbf6; font: 750 1.05rem/1.2 Inter, sans-serif; letter-spacing: -.02em; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking__intro { max-width: 34ch; font-size: .68rem; line-height: 1.4; color: #abc7c2; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__edit { min-height: 2.5rem; padding: .5rem .75rem; border: 1px solid #8ed4b5; background: linear-gradient(#a8e3c4, #70bea3); color: #0d2922; font-size: .65rem; font-weight: 850; white-space: nowrap; box-shadow: inset 0 1px #dcffee66; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__edit:hover { filter: brightness(1.08); }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__quick > .pass-afking__edit { min-height: 2.5rem; padding: .5rem .75rem; border: 1px solid #8ed4b5; background: linear-gradient(#a8e3c4, #70bea3); color: #0d2922; font-size: .65rem; font-weight: 850; white-space: nowrap; box-shadow: inset 0 1px #dcffee66; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__quick > .pass-afking__edit:hover { filter: brightness(1.08); }
   body.layout-basic[data-desktop-page] .info-afking [hidden] { display: none !important; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking-error--inline {
     position: fixed; bottom: calc(var(--info-rail-height) + .5rem); left: 50%; transform: translateX(-50%);
@@ -701,22 +718,6 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
     body.layout-basic[data-desktop-page] .info-rail .sdgnrs-rail .sdgnrs-rail__burn { min-height: 28px; }
   }
 
-  body.layout-basic[data-desktop-page] .pass-shop__offer { gap: .2rem; padding-block: .25rem; }
-  body.layout-basic[data-desktop-page] .pass-shop__subscription { gap: .2rem; padding-block: 0; }
-  body.layout-basic[data-desktop-page] .pass-shop__whale { gap: .1rem; grid-template-rows: minmax(0, 1fr) 20px; padding: .15rem; }
-  body.layout-basic[data-desktop-page] .pass-shop__bulk { display: none; }
-  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer { gap: .1rem; padding: 0; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer strong { font-size: .59rem; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer b { font-size: .8rem; }
-  body.layout-basic[data-desktop-page] .pass-shop__quantity :is(button, input) { height: 18px; min-height: 18px; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__current { font-size: .85rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__intro { font-size: .59rem; line-height: 1.25; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking { padding-block: .25rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__account { gap: .3rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__head { gap: .1rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__current { font-size: .65rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-product-copy { gap: .1rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__quick > button { min-height: 26px; padding-block: .25rem; }
 
 
 

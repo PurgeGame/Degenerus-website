@@ -208,6 +208,9 @@ body.layout-basic .dgx-dialog__card[data-kind="tickets"] {
   --qst-dialog-button-start: #ffd166;
   --qst-dialog-button-end: #e79419;
   --qst-dialog-button-ink: #211302;
+  width: min(94vw, 34rem);
+  gap: 0.5rem;
+  padding: 0.7rem;
 }
 body.layout-basic .dgx-dialog__card[data-kind="luckboxes"] {
   --qst-dialog-rgb: 167, 139, 250;
@@ -252,10 +255,17 @@ body.layout-basic .dgx-dialog__body { display: grid; gap: 0.6rem; }
 
 body.layout-basic .dgx-dialog .dgx-shelf { gap: 0; }
 body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-pieces {
-  grid-template-columns: repeat(auto-fit, minmax(5.4rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.5rem;
 }
-body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-piece { min-height: 6.4rem; }
+body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-pieces:has([data-dgx-piece="foil"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-piece { min-height: clamp(6.5rem, 26vw, 10.2rem); }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets { padding: .35rem .15rem; background: none; border: 0; box-shadow: none; }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-price { font-size: .9rem; }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets:has([data-dgx-piece="foil"]) .dec-ticket-price { font-size: clamp(.62rem, 2.3vw, .84rem); }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art { container-type: size; }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art > :is(.dec-entry-face, .dec-ticket-face) { width: min(100cqw, 100cqh); height: auto; max-height: 100%; }
+body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art > :is(.dec-pack-face, .dec-foil-pack-face) { width: min(92cqw, 72cqh); height: auto; max-height: 100%; }
 body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-piece--foil.is-selected {
   border-color: rgba(253, 230, 138, 0.95);
   box-shadow: 0 0 14px rgba(251, 191, 36, 0.3);
@@ -443,9 +453,8 @@ body.layout-basic .dgx-receipt__amount { display: block; color: #f6cc75; font: 8
 body.layout-basic .dgx-receipt p { margin: .6rem 0 1rem; color: #c9c3b9; font: 500 .85rem/1.5 Inter, sans-serif; }
 body.layout-basic .dgx-receipt button { width: 100%; min-height: 44px; border: 1px solid #b7994e; border-radius: 8px; background: linear-gradient(#715b27, #41351c); color: #ffe5a3; font: 800 .8rem/1 Inter, sans-serif; letter-spacing: .1em; cursor: pointer; }
 
-body.layout-basic .dgx-dialog .dgx-prices { display: grid; gap: .25rem; padding: .65rem .8rem; border: 1px solid #7c694b; border-radius: 8px; background: #141b20; color: #dcebdc; font: 700 .8rem/1.3 'Roboto Mono', monospace; }
 body.layout-basic .dgx-dialog :is(.dgx-bonus, .dgx-boon-chance) { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem .8rem; border: 1px solid #426a63; border-radius: 8px; background: #142d27; color: #b9f6d1; }
 body.layout-basic .dgx-dialog :is(.dgx-bonus, .dgx-boon-chance) > small { font: 800 .7rem/1.2 Inter, sans-serif; }
 body.layout-basic .dgx-dialog :is(.dgx-bonus, .dgx-boon-chance) > strong { font: 800 .95rem/1.3 'Roboto Mono', monospace; text-align: right; }
 body.layout-basic .dgx-dialog .dgx-boon-chance { border-color: #685074; background: #2b1c33; color: #e4c6f6; }
-body.layout-basic .dgx-dialog .dgx-boon-chance[hidden] { display: none; }
+body.layout-basic .dgx-dialog :is(.dgx-bonus, .dgx-boon-chance)[hidden] { display: none; }

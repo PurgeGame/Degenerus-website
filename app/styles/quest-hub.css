@@ -367,8 +367,30 @@ body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy
   body.layout-basic .play-grid .quest-hub .referral-strip { --utility-height: 3.75rem; }
 }
 
-body.layout-basic .qst-purchase-prices { display: grid; gap: .25rem; padding: .65rem .8rem; border: 1px solid #7c694b; border-radius: 8px; background: #141b20; font: 700 .8rem/1.3 'Roboto Mono', monospace; }
-body.layout-basic .qst-purchase-prices > span { display: flex; justify-content: space-between; gap: 1rem; }
+/* Put exact product prices immediately above the ticket-count control. */
+body.layout-basic .qst-purchase-prices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .3rem;
+  padding: .65rem .4rem;
+  border: 1px solid #7c694b;
+  border-radius: 8px;
+  background: #211c18;
+  font: 800 .95rem/1.2 'Roboto Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+body.layout-basic .qst-purchase-prices > span { display: grid; grid-template-rows: .7rem 1.2rem; gap: .35rem; justify-items: center; min-width: 0; }
+body.layout-basic .qst-purchase-prices > span + span { border-left: 1px solid #7c694b55; }
+body.layout-basic .qst-purchase-prices > span > span { color: #cbb98f; font: 800 .6rem/1 Inter, sans-serif; letter-spacing: .06em; }
+body.layout-basic .qst-purchase-prices strong { display: grid; grid-template-columns: max-content max-content; align-items: baseline; gap: .25rem; color: #fff1c5; white-space: nowrap; }
+body.layout-basic .qst-purchase-price__unit { color: #cbb98f; font-size: .65rem; }
+body.layout-basic .qst-action-dialog__card[data-purchase="true"] { width: min(94vw, 36rem); gap: .5rem; padding: .7rem; }
+body.layout-basic .qst-action-dialog__card[data-purchase="true"] .qst-action-requirement { display: none; }
+@media (max-width: 420px) {
+  body.layout-basic .qst-purchase-prices { font-size: .8rem; }
+  body.layout-basic .qst-purchase-prices strong { gap: .18rem; }
+  body.layout-basic .qst-purchase-price__unit { font-size: .58rem; }
+}
 body.layout-basic .qst-purchase-bonus { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem .8rem; border: 1px solid #426a63; border-radius: 8px; background: #142d27; color: #b9f6d1; }
 body.layout-basic .qst-purchase-bonus > span { font: 800 .7rem/1.2 Inter, sans-serif; }
 body.layout-basic .qst-purchase-bonus > strong { font: 800 1rem/1.2 'Roboto Mono', monospace; }

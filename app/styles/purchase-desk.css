@@ -169,34 +169,6 @@ body.layout-basic .app-decimator-panel .dec-purchase-help:hover {
 /* Rate window: first of the panel's green-LED glass readouts (the dormant
    bonus window and funds ledger repeat the same glass-in-brass-bezel
    language). */
-body.layout-basic .app-decimator-panel .dec-price {
-  box-sizing: border-box;
-  width: min(11.4rem, calc(100% - 1rem));
-  justify-self: center;
-  padding: 0.28rem 0.72rem 0.25rem;
-  overflow: hidden;
-  border: 1px solid rgba(118, 159, 128, 0.38);
-  border-radius: 3px;
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
-    #08100d;
-  color: #cce9d1;
-  box-shadow:
-    0 0 0 1px rgba(124, 88, 34, 0.5),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.64),
-    inset 0 0 9px rgba(81, 190, 112, 0.04);
-  font-family: "Roboto Mono", ui-monospace, monospace;
-  font-size: 0.61rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.035em;
-  line-height: 1;
-  text-align: center;
-  text-overflow: ellipsis;
-  text-shadow: 0 0 5px rgba(115, 223, 147, 0.18);
-  white-space: nowrap;
-}
-
 body.layout-basic .app-decimator-panel .dec-input-row--pair {
   gap: 0.46rem;
   margin-top: 0.02rem;
@@ -1434,7 +1406,6 @@ body.layout-basic .app-decimator-panel .dec-foil {
   body.layout-basic .app-decimator-panel .dec-box-card,
   body.layout-basic .app-decimator-panel .dec-custom-box-toggle,
   body.layout-basic .app-decimator-panel .dec-custom-box-fields,
-  body.layout-basic .app-decimator-panel .dec-price,
   body.layout-basic .app-decimator-panel .dec-funds {
     background: Canvas;
     box-shadow: none;
@@ -1520,71 +1491,6 @@ body.layout-basic .app-decimator-panel .dec-purchase-help {
   left: auto;
   width: 1.18rem;
   height: 1.18rem;
-}
-
-body.layout-basic .app-decimator-panel .dec-price {
-  display: grid;
-  width: 100%;
-  height: 2.8rem;
-  min-height: 2.8rem;
-  min-width: 0;
-  grid-column: 1;
-  grid-row: 2;
-  grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;
-  align-content: center;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.1rem;
-  column-gap: 0;
-  padding: 0.25rem 0.26rem;
-  border-radius: 5px;
-  font-size: 0.54rem;
-  letter-spacing: 0.01em;
-  line-height: 1.08;
-}
-
-body.layout-basic .app-decimator-panel .dec-price > .dec-price__row {
-  display: contents;
-}
-
-body.layout-basic .app-decimator-panel .dec-price__count {
-  grid-column: 1;
-  text-align: left;
-}
-
-body.layout-basic .app-decimator-panel .dec-price__kind {
-  grid-column: 3;
-  text-align: right;
-}
-
-body.layout-basic .app-decimator-panel .dec-price__sep {
-  grid-column: 5;
-  text-align: center;
-}
-
-/* The amount and its unit own separate cells. Both stay left-aligned so the
-   digits read straight down from the equals sign, and the unit gets a column
-   of its own so ETH (or FLIP) sits on one x down all three lines however many
-   digits the amount takes -- a longer level-1 entry price widens the shared
-   amount column for every quote at once rather than pushing its own unit out
-   of line. The amount column is sized to content, not to a reserved width, so
-   the unit lands one space past whichever of the three quotes runs furthest. */
-body.layout-basic .app-decimator-panel .dec-price__amount {
-  grid-column: 7;
-  min-width: 0;
-  overflow: visible;
-  text-align: left;
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
-body.layout-basic .app-decimator-panel .dec-price__unit {
-  grid-column: 9;
-  min-width: 0;
-  overflow: visible;
-  text-align: left;
-  text-overflow: clip;
-  white-space: nowrap;
 }
 
 body.layout-basic .app-decimator-panel .dec-flip-credit--header {
@@ -3685,38 +3591,6 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
     height: 1rem;
   }
 
-  /* The title owns the top row. The three-rate screen and bonus readout share
-     an equal-height instrument row beneath it. */
-  body.layout-basic .app-decimator-panel .dec-price {
-    grid-column: 1;
-    grid-row: 2;
-    grid-template-columns: 1ch max-content 1.5ch max-content 0.5ch minmax(max-content, 1fr);
-    justify-content: stretch;
-    gap: 0.09rem 0.08rem;
-    padding: 0.25rem 0.18rem;
-    font-size: clamp(0.54rem, 2.2vw, 0.6rem);
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__count {
-    grid-column: 1;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__kind {
-    grid-column: 2;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__sep {
-    grid-column: 3;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__amount {
-    grid-column: 4;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__unit {
-    grid-column: 6;
-  }
-
   body.layout-basic .app-decimator-panel .dec-flip-credit--header {
     grid-column: 2;
     grid-row: 2;
@@ -3837,36 +3711,6 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
     padding-top: 0;
   }
 
-  /* Keep the desktop quote's balanced tabular columns when the hero stacks.
-     The earlier compact fallback packs them to the left, leaving the rest of
-     a wider rate window visually empty. */
-  body.layout-basic .app-decimator-panel .dec-price {
-    grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;
-    justify-content: center;
-    gap: 0.1rem;
-    column-gap: 0;
-    font-size: 0.54rem;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__count {
-    grid-column: 1;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__kind {
-    grid-column: 3;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__sep {
-    grid-column: 5;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__amount {
-    grid-column: 7;
-  }
-
-  body.layout-basic .app-decimator-panel .dec-price__unit {
-    grid-column: 9;
-  }
 }
 
 /* The hero is still a single stacked column on small tablets and landscape
@@ -3881,15 +3725,10 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
     grid-template-rows: auto 2.35rem;
   }
 
-  body.layout-basic .app-decimator-panel .dec-price {
-    grid-column: 2;
-  }
-
   body.layout-basic .app-decimator-panel .dec-flip-credit--header {
     grid-column: 3;
   }
 
-  body.layout-basic .app-decimator-panel .dec-price,
   body.layout-basic .app-decimator-panel .dec-flip-credit--header {
     height: 2.35rem;
     min-height: 2.35rem;
@@ -3939,15 +3778,10 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].i
     grid-template-rows: auto 2.35rem;
   }
 
-  body.layout-basic .app-decimator-panel .dec-price {
-    grid-column: 2;
-  }
-
   body.layout-basic .app-decimator-panel .dec-flip-credit--header {
     grid-column: 3;
   }
 
-  body.layout-basic .app-decimator-panel .dec-price,
   body.layout-basic .app-decimator-panel .dec-flip-credit--header {
     height: 2.35rem;
     min-height: 2.35rem;
@@ -4285,3 +4119,146 @@ body.layout-basic .dec-popup-bonus { display: flex; align-items: center; justify
 body.layout-basic .dec-popup-bonus > span { font: 800 .7rem/1.2 Inter, sans-serif; }
 body.layout-basic .dec-popup-bonus > strong { font: 800 1rem/1.2 'Roboto Mono', monospace; }
 body.layout-basic .dec-popup-bonus[hidden] { display: none; }
+
+/* Each ticket choice carries its price directly above the art. A single
+   header row leaves more of the cabinet for the products themselves. */
+body.layout-basic .app-decimator-panel .panel-header {
+  min-height: 3rem;
+  grid-template-columns: minmax(0, 1fr) 8rem;
+  grid-template-rows: auto;
+  gap: 0.45rem;
+  padding: 0.3rem 0.46rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 0 1.5rem 0 0;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title::before,
+body.layout-basic .app-decimator-panel .dec-header-title::after {
+  display: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+  grid-column: 2;
+  grid-row: 1;
+  height: 2.35rem;
+  min-height: 2.35rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece {
+  --dec-ticket-quote-height: 2.35rem;
+  min-height: 7rem;
+  padding: 0;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-price {
+  position: absolute;
+  z-index: 12;
+  inset: 0 0 auto;
+  display: grid;
+  height: var(--dec-ticket-quote-height);
+  grid-template-columns: max-content max-content;
+  grid-template-rows: 0.8rem 1.25rem;
+  align-content: start;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.12rem 0.24rem;
+  padding: 0.1rem 0;
+  color: #fff1c5;
+  font-family: 'Roboto Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.65rem, 3.4cqi, 0.84rem);
+  font-weight: 800;
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-price :is(.dec-price__count, .dec-price__sep) {
+  display: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-price .dec-price__kind {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  color: #cbb98f;
+  font: 800 0.53rem/1 Inter, sans-serif;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-price .dec-price__amount {
+  grid-column: 1;
+  grid-row: 2;
+  overflow: visible;
+  text-align: right;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-price .dec-price__unit {
+  grid-column: 2;
+  grid-row: 2;
+  color: #cbb98f;
+  font-size: 0.56rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-price .dec-foil-price {
+  display: contents;
+  color: inherit;
+  font: inherit;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece > .dec-ticket-piece__art {
+  inset: var(--dec-ticket-quote-height) 0.08rem 0.08rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:is(.dec-ticket-piece--ticket, .dec-ticket-piece--pack, .dec-ticket-piece--foil) > quest-objective-indicator {
+  top: var(--dec-ticket-quote-height);
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-limit-stamp {
+  top: calc(var(--dec-ticket-quote-height) + 0.12rem);
+}
+
+@media (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    grid-template-columns: minmax(0, 1fr) 8rem;
+    padding: 0.3rem 0.5rem;
+  }
+
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero .app-decimator-panel .dec-ticket-pieces .dec-pack-face :is(.dec-pack-level, .dec-pack-count) {
+    font-size: clamp(0.5rem, 14cqi, 0.8rem);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 768px) {
+  body.layout-basic[data-mobile-page="buy"] > .container > main > .jackpot-hero,
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero > app-decimator-panel,
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero > app-decimator-panel > .app-decimator-panel {
+    flex: none;
+    min-height: 0;
+  }
+
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero .app-decimator-panel .dec-purchase-builders {
+    flex: none;
+    grid-template-rows: auto auto;
+  }
+
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero .app-decimator-panel .dec-purchase-builders > .dec-purchase-builder {
+    display: block;
+  }
+
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero .app-decimator-panel .dec-ticket-pieces .dec-ticket-piece {
+    min-height: 8.6rem;
+  }
+
+  body.layout-basic[data-mobile-page="buy"] .jackpot-hero .app-decimator-panel .dec-ticket-pieces:has(.dec-ticket-piece--foil:not([hidden])) .dec-ticket-piece {
+    min-height: 7.6rem;
+  }
+}

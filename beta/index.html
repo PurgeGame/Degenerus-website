@@ -87,9 +87,9 @@
   <link rel="stylesheet" data-href="/app/styles/sacrifices.css">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css?v=number-privacy-20261006">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css?v=idle-rendering-20261008">
-  <link rel="stylesheet" href="/app/styles/degenesis-hub.css?v=purchase-polish-20261027">
+  <link rel="stylesheet" href="/app/styles/degenesis-hub.css?v=bottom-bar-polish-20261028">
   <link rel="stylesheet" href="/app/styles/degenesis-reveal.css?v=purchase-polish-20261027">
-  <link rel="stylesheet" href="/app/styles/afking-subscription.css?v=afking-pending-20261028">
+  <link rel="stylesheet" href="/app/styles/afking-subscription.css?v=bottom-bar-polish-20261028">
   <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css?v=mining-bonus-20261003">
   <link rel="stylesheet" href="/app/styles/settings-menu.css?v=number-privacy-20261006">
   <link rel="stylesheet" data-href="/app/styles/afking-funding-warning.css">
@@ -103,15 +103,15 @@
   <link rel="stylesheet" href="/app/styles/status-indicators.css?v=quest-overflow-20261006">
   <!-- BUY IN is part of the static three-column hero, so its final visual
        layer stays render-blocking and loads after the shared status badges. -->
-  <link rel="stylesheet" href="/app/styles/purchase-desk.css?v=purchase-polish-20261027">
+  <link rel="stylesheet" href="/app/styles/purchase-desk.css?v=bottom-bar-polish-20261028">
   <link rel="stylesheet" href="/app/styles/player-extras.css?v=token-row-20260929">
   <link rel="stylesheet" href="/app/styles/site-composition.css?v=quest-hub-20260929">
-  <link rel="stylesheet" href="/app/styles/quest-hub.css?v=quest-growth-slot-20261027">
+  <link rel="stylesheet" href="/app/styles/quest-hub.css?v=bottom-bar-polish-20261028">
   <!-- Phone section pager + bottom dock. Blocking: it hides inactive pages
        and styles the static dock markup at first paint. -->
   <link rel="stylesheet" href="/app/styles/mobile-pager.css">
-  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=afking-pending-20261028">
-  <link rel="stylesheet" href="/app/styles/token-tools.css?v=token-grid-20261028">
+  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=bottom-bar-polish-20261028">
+  <link rel="stylesheet" href="/app/styles/token-tools.css?v=bottom-bar-polish-20261028">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -151,14 +151,14 @@
       "/app/app/bingo-watch.js": "/app/app/bingo-watch.js?v=pending-recent-receipts-20261001",
       "/app/components/app-sdgnrs-redemptions.js": "/app/components/app-sdgnrs-redemptions.js?v=pending-deployment-scope-20261001",
       "/app/app/lootbox-legs.js": "/app/app/lootbox-legs.js?v=scoped-box-replays-20261009",
-      "/app/components/app-sdgnrs-burn-rail.js": "/app/components/app-sdgnrs-burn-rail.js?v=token-grid-20261028",
+      "/app/components/app-sdgnrs-burn-rail.js": "/app/components/app-sdgnrs-burn-rail.js?v=bottom-bar-polish-20261028",
       "/app/app/sacrifices.js": "/app/app/sacrifices.js?v=larger-flames-20261002",
       "/app/app/button-feedback.js": "/app/app/button-feedback.js?v=reveal-efficiency-20261004",
       "/app/components/dgn-winnings.js": "/app/components/dgn-winnings.js?v=reveal-efficiency-20261004",
       "/app/components/dgn-pop-board.js": "/app/components/dgn-pop-board.js?v=auto-reveal-audio-20261027",
       "/app/app/jackpot-sfx.js": "/app/app/jackpot-sfx.js?v=auto-reveal-audio-20261027",
       "/app/app/pack-watch.js": "/app/app/pack-watch.js?v=next-rng-only-20260930",
-      "/app/components/app-degenesis-hub.js": "/app/components/app-degenesis-hub.js?v=purchase-polish-20261027",
+      "/app/components/app-degenesis-hub.js": "/app/components/app-degenesis-hub.js?v=bottom-bar-polish-20261028",
       "/app/app/main.js": "/app/app/main.js?v=loading-baf-20261027",
       "/app/app/mine-flip.js": "/app/app/mine-flip.js?v=mining-reward-20261003",
       "/app/app/ui-preferences.js": "/app/app/ui-preferences.js?v=blur-balances-20261006",
@@ -184,8 +184,8 @@
       "lean-qr": "/app/vendor/lean-qr.mjs",
       "/app/components/gold-rush-headline.js": "/app/components/gold-rush-headline.js?v=tutorial-fixtures-13",
       "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=decimator-battle-20260930",
-      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=nonzero-luckbox-bonus-20261028",
-      "/app/components/app-token-funds.js": "/app/components/app-token-funds.js?v=token-grid-20261028",
+      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=bottom-bar-polish-20261028",
+      "/app/components/app-token-funds.js": "/app/components/app-token-funds.js?v=bottom-bar-polish-20261028",
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=tutorial-fixtures-13",
       "/app/components/app-sacrifice-panel.js": "/app/components/app-sacrifice-panel.js?v=boon-tooltip-fit-20261001",
       "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=purchase-polish-20261027",
@@ -197,10 +197,10 @@
       "/app/app/deity-symbol.js": "/app/app/deity-symbol.js?v=deity-picker-clean-20260930",
       "/app/app/desktop-info-rail.js": "/app/app/desktop-info-rail.js?v=afking-pending-20261028",
       "/app/app/passes.js": "/app/app/passes.js?v=saved-page-20261028",
-      "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=afking-pending-20261028",
-      "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=incinerator-slider-20261004",
+      "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=bottom-bar-polish-20261028",
+      "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=bottom-bar-polish-20261028",
       "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=quest-growth-slot-20261027",
-      "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=nonzero-luckbox-bonus-20261028",
+      "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=bottom-bar-polish-20261028",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=afking-pending-20261028",
       "/app/craps/replay-contract.js": "/app/craps/replay-contract.js?v=craps-31ca6fdd-p7a-v6-final-ranks-20261010",
       "/app/craps/replay-engine.js": "/app/craps/replay-engine.js?v=craps-31ca6fdd-p7a-v6-final-ranks-20261010",
@@ -489,16 +489,21 @@
                 <button type="button" class="pass-shop__brand" data-panel-open="passes" aria-label="Open AFKing passes">
                   <img src="/app/assets/afking-passes-teal-ember-v18.svg" alt="AFKing passes" width="96" height="72">
                 </button>
+                <div class="pass-shop__catalog">
                 <div class="pass-shop__purchases">
                 <button type="button" class="pass-shop__offer pass-shop__offer--lazy" data-pass-quickbuy="lazy" data-write disabled hidden>
                   <strong data-bind="pass-summary-buy-lazy-name">BUY LAZY</strong>
                   <small>10 LEVELS</small>
+                  <span class="pass-shop__benefit">1 ticket every level</span>
+                  <span class="pass-shop__rating">+85% DEGEN rating</span>
                   <b data-bind="pass-summary-buy-lazy-price">CHECKING…</b>
                 </button>
                 <div class="pass-shop__whale">
                   <button type="button" class="pass-shop__offer pass-shop__offer--whale" data-pass-quickbuy="whale" data-write disabled>
                     <strong data-bind="pass-summary-buy-whale-name">BUY WHALE</strong>
                     <small>100 LEVELS</small>
+                    <span class="pass-shop__benefit">1 ticket every other level</span>
+                    <span class="pass-shop__rating">+115% DEGEN rating</span>
                     <b data-bind="pass-summary-buy-whale-price">CHECKING…</b>
                   </button>
                   <div class="pass-shop__quantity" role="group" aria-label="Paid Whale pass quantity">
@@ -512,8 +517,17 @@
                 <button type="button" class="pass-shop__offer pass-shop__offer--deity" data-pass-quickbuy="deity" data-write disabled hidden>
                   <strong data-bind="pass-summary-buy-deity-name">BUY DEITY</strong>
                   <small>PERPETUAL</small>
+                  <span class="pass-shop__benefit">Tickets + symbol entries</span>
+                  <span class="pass-shop__rating">+155% DEGEN rating</span>
                   <b data-bind="pass-summary-buy-deity-price">CHECKING…</b>
                 </button>
+                </div>
+                <div class="pass-shop__included" aria-label="Every pass includes these benefits">
+                  <strong>EVERY PASS</strong>
+                  <span><b>+100%</b> mining</span>
+                  <span title="A bonus Luckbox worth 10% of the pass price"><b>10%</b> bonus Luckbox</span>
+                  <span>AFKing seat</span>
+                </div>
                 </div>
                 <div class="pass-shop__subscription" data-pass-subscription-dock hidden></div>
               </div>
@@ -755,7 +769,7 @@
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
        eager; the two large outer hero columns are scheduled below. -->
   <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
-  <script type="module" src="/app/components/app-degenesis-hub.js?v=purchase-polish-20261027"></script>
+  <script type="module" src="/app/components/app-degenesis-hub.js?v=bottom-bar-polish-20261028"></script>
   <script type="module">
     import { mountPanelPopups } from "/app/app/panel-popups.js";
     mountPanelPopups();

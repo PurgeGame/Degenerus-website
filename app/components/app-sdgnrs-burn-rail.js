@@ -2,10 +2,7 @@ var L=Object.defineProperty;var i=(e,t)=>L(e,"name",{value:t,configurable:!0});i
       <section class="sdgnrs-rail" data-bind="sdr-shell"
                aria-label="sDGNRS and DGNRS balances, expected burn value, and all-time GNRUS funding">
         <div class="sdgnrs-rail__redemption" role="group" aria-label="Token redemption">
-          <span class="sdgnrs-rail__logo" role="img" aria-label="sDGNRS">
-            <img class="sdgnrs-rail__logo-frame"
-                 src="/app/assets/degenerette/sdgnrs-logo.svg?v=larger-flames-20261002" alt="">
-          </span>
+
 
           <div class="sdgnrs-rail__heading">
             <h2>DGNRS / sDGNRS</h2>
@@ -16,6 +13,10 @@ var L=Object.defineProperty;var i=(e,t)=>L(e,"name",{value:t,configurable:!0});i
 
           <span class="sdgnrs-rail__metric sdgnrs-rail__metric--balances">
             <small>BALANCE</small>
+          <span class="sdgnrs-rail__logo" role="img" aria-label="sDGNRS">
+            <img class="sdgnrs-rail__logo-frame"
+                 src="/app/assets/degenerette/sdgnrs-logo.svg?v=larger-flames-20261002" alt="">
+          </span>
             <strong class="sdgnrs-rail__balances">
               <span class="sdgnrs-rail__token">
                 <b data-bind="sdr-sdgnrs">—</b><em>sDGNRS</em>
