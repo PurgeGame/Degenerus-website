@@ -368,3 +368,10 @@ body.layout-basic .play-grid .quest-hub .referral-strip .deg-referral-card__copy
   body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card { grid-template-columns: 3.2rem minmax(0, 1fr) var(--ad-stub); }
   body.layout-basic .play-grid .quest-hub__rewards:has(.has-live-book) .referral-strip .deg-referral-card__coin { width: 3.2rem; height: 3.2rem; }
 }
+
+body.layout-basic .qst-purchase-prices { display: grid; gap: .25rem; padding: .65rem .8rem; border: 1px solid #7c694b; border-radius: 8px; background: #141b20; font: 700 .8rem/1.3 'Roboto Mono', monospace; }
+body.layout-basic .qst-purchase-prices > span { display: flex; justify-content: space-between; gap: 1rem; }
+body.layout-basic .qst-purchase-bonus { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem .8rem; border: 1px solid #426a63; border-radius: 8px; background: #142d27; color: #b9f6d1; }
+body.layout-basic .qst-purchase-bonus > span { font: 800 .7rem/1.2 Inter, sans-serif; }
+body.layout-basic .qst-purchase-bonus > strong { font: 800 1rem/1.2 'Roboto Mono', monospace; }
+body.layout-basic :is(.qst-purchase-prices, .qst-purchase-bonus)[hidden] { display: none; }

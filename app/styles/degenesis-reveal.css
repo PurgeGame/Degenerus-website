@@ -44,3 +44,24 @@
 @media (prefers-reduced-motion: reduce) {
   .rvl-degenesis-case__lid, .rvl-degenesis-case__glow { transition: none; }
 }
+
+/* Degenesis rewards are the result, so give them a full-sized reveal. */
+.rvl-stage--degenesis { width: min(94vw, 760px); gap: 1rem; font-family: Inter, sans-serif; color: #f8fafc; }
+.rvl-stage--degenesis > .rvl-summary { width: 100%; max-height: 76dvh; overflow-y: auto; padding: .5rem; box-sizing: border-box; }
+.rvl-stage--degenesis .rvl-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; width: 100%; }
+.rvl-stage--degenesis .rvl-summary-grid[data-card-count="1"] { grid-template-columns: minmax(0, 340px); justify-content: center; }
+.rvl-stage--degenesis .rvl-card--mini { width: 100%; min-width: 0; padding: 1.25rem; box-sizing: border-box; }
+.rvl-stage--degenesis .rvl-card--mini .rvl-card-inner { gap: .75rem; }
+.rvl-stage--degenesis .rvl-card--mini .rvl-card-icon { width: 112px; height: 100px; font-size: 4rem; }
+.rvl-stage--degenesis .rvl-card--mini .rvl-card-icon--flip-pile { width: 160px; height: 112px; }
+.rvl-stage--degenesis .rvl-card--mini .rvl-card-value { color: #f8fafc; font-size: clamp(1.6rem, 5vw, 2.5rem); overflow-wrap: anywhere; }
+.rvl-stage--degenesis .rvl-card--mini .rvl-card-label { color: #cbd5e1; font-size: .85rem; }
+@media (max-width: 600px), (max-height: 650px) {
+  .rvl-stage--degenesis .rvl-summary-grid { gap: .5rem; }
+  .rvl-stage--degenesis .rvl-card--mini { padding: .85rem .5rem; }
+  .rvl-stage--degenesis .rvl-card--mini .rvl-card-icon { width: 72px; height: 64px; }
+  .rvl-stage--degenesis .rvl-card--mini .rvl-card-icon--flip-pile { width: 108px; height: 76px; }
+  .rvl-stage--degenesis .rvl-summary-grid[data-card-count="1"] .rvl-card--mini { padding: 1.5rem; }
+  .rvl-stage--degenesis .rvl-summary-grid[data-card-count="1"] .rvl-card-icon--flip-pile { width: 160px; height: 112px; }
+  .rvl-stage--degenesis .rvl-card--mini .rvl-card-label { font-size: .7rem; }
+}

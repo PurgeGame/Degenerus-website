@@ -4280,3 +4280,8 @@ body.layout-basic .app-decimator-panel .dec-pack-face .dec-pack-mark img {
     cursor: url('/app/assets/shopping-cart-cursor.svg') 3 3, pointer;
   }
 }
+
+body.layout-basic .dec-popup-bonus { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem .8rem; border: 1px solid #426a63; border-radius: 8px; background: #142d27; color: #b9f6d1; }
+body.layout-basic .dec-popup-bonus > span { font: 800 .7rem/1.2 Inter, sans-serif; }
+body.layout-basic .dec-popup-bonus > strong { font: 800 1rem/1.2 'Roboto Mono', monospace; }
+body.layout-basic .dec-popup-bonus[hidden] { display: none; }
