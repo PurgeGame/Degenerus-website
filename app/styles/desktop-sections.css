@@ -4,6 +4,11 @@
 .info-rail, .info-rail__track { display: contents; }
 .info-rail__nav, .info-rail__mining, .info-rail__feedback, .info-afking { display: none; }
 .rrt-caption { display: none; }
+body.layout-basic .craps-entry__action > button[data-craps-funds="insufficient"] {
+  background: #302c36; color: #b4aebb; border-color: #6a6273;
+  box-shadow: none; opacity: 1; cursor: not-allowed;
+}
+body.layout-basic .craps-entry__listing tr:has(button[data-craps-funds="insufficient"]) { filter: saturate(.15); }
 body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
 body.layout-basic .inv-level-btn .inv-ticket-count { display: flex; flex-direction: column; align-items: center; gap: .18rem; }
 body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; letter-spacing: .025em; color: #b9bfce; }
@@ -25,7 +30,8 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
     display: grid; flex: 1 1 auto; min-height: 0; align-content: start;
     grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; gap: .4rem;
     overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
-    margin-bottom: var(--info-rail-height); padding: .4rem 0 .5rem; scrollbar-width: none;
+    margin-bottom: var(--info-rail-height); padding: .4rem 0 .5rem;
+    scrollbar-width: thin; scrollbar-color: #9c8055 #17151f;
   }
   body.layout-basic[data-desktop-page] main > * { grid-column: 1 / -1; min-width: 0; }
   body.layout-basic[data-desktop-page] main > gold-rush-headline { margin: 0; }
@@ -560,27 +566,65 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .gr__label-text { font-size: min(1.05cqw, 6.5cqh); }
   body.layout-basic[data-desktop-page] .gr__unit-code { font-size: min(1.335cqw, 8cqh); }
 
+  body.layout-basic[data-desktop-page="games"] { --desktop-width: min(calc(100vw - 120px), 1660px); }
   body.layout-basic[data-desktop-page="games"] > .container > main { align-content: safe center; }
   body.layout-basic[data-desktop-page] main > .play-grid[data-dpage="games"] {
     grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "craps degenerette";
     width: min(100%, 1440px); margin-inline: auto; gap: clamp(1rem, 2vw, 2rem);
     border: 0; background: none; box-shadow: none; overflow: visible;
+    height: max(23rem, var(--desktop-game-height, calc(100dvh - 250px)));
   }
   body.layout-basic[data-desktop-page] main > .play-grid[data-dpage="games"] > :is(app-craps-entry, app-degenerette-panel) {
     border: 1px solid var(--site-frame); border-radius: var(--site-radius);
     background: var(--bg-secondary); overflow: hidden;
   }
   body.layout-basic[data-desktop-page] main > .play-grid[data-dpage="games"] > app-degenerette-panel { contain: inline-size; }
-  body.layout-basic[data-desktop-page] .play-grid .deg-setup { display: flex; flex: none; flex-direction: column; }
-  body.layout-basic[data-desktop-page] .play-grid .deg-block--symbol { flex: none; min-height: min-content; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-setup { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; height: 100%; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-block--symbol { flex: 1 1 auto; min-height: 0; }
   body.layout-basic[data-desktop-page] .play-grid .deg-wager-column { flex: none; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-header {
+    flex: 1 1 0; min-height: 3.5rem; max-height: clamp(4rem, calc(var(--desktop-game-height, 600px) * .24), 15rem);
+  }
+  body.layout-basic[data-desktop-page] .play-grid .deg-heading,
+  body.layout-basic[data-desktop-page] .play-grid .deg-heading h2 { height: 100%; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-learn-link {
+    height: 100%; aspect-ratio: auto;
+  }
+  body.layout-basic[data-desktop-page] .play-grid .deg-quickplay-logo { height: 100%; object-fit: contain; }
   body.layout-basic[data-desktop-page] .play-grid .deg-quickplay-controls {
     --deg-champ: min(calc((100cqh - 12px - 1.6rem) / .84), 42cqw);
     --deg-top: max(4px, calc((100cqh - var(--deg-champ) * .84 - 4px - 1.6rem) / 2));
-    flex: none; height: clamp(9.25rem, 18dvh, 13rem); min-height: clamp(9.25rem, 18dvh, 13rem);
+    flex: 1 1 auto; height: auto; min-height: 5rem;
   }
   body.layout-basic[data-desktop-page] .play-grid .deg-quickplay-brand .dgn-symbol-preview__title { height: 1.6rem; }
   body.layout-basic[data-desktop-page] .play-grid .deg-quickplay-brand .dgn-symbol-preview__name { font-size: 1rem; }
+  /* Both games share the available height. Artwork gives way before inputs;
+     a longer battle history can still scroll inside its visible lobby. */
+  body.layout-basic[data-desktop-page] .play-grid > app-craps-entry { align-self: stretch; min-height: 0; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry { height: 100%; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__head {
+    box-sizing: border-box; flex: 0 0 clamp(4.5rem, calc(var(--desktop-game-height, 600px) * .16), 7rem); min-height: 0;
+  }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__craps-logo { position: absolute; inset: .1rem .25rem; width: auto; height: auto; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__craps-lockup { min-height: 0; max-height: 100%; height: 100%; object-fit: contain; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__run-it-up-mark {
+    --craps-runup-width: min(67cqi, calc((clamp(4.5rem, var(--desktop-game-height, 600px) * .16, 7rem) - 2.5rem) * 3.25));
+    width: var(--craps-runup-width); height: calc(var(--craps-runup-width) * 355 / 1400);
+  }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__lobby { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__listing { flex: 1 0 auto; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__listing tbody tr:not(.craps-entry__results-head) {
+    height: clamp(1.5rem, calc(var(--desktop-game-height, 600px) * .055), 3rem);
+  }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__action > button,
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__entered {
+    height: clamp(1.3rem, calc(var(--desktop-game-height, 600px) * .052), 2.4rem); min-height: 0;
+  }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__betting { flex: none; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__surface-strip { min-height: clamp(1.7rem, calc(var(--desktop-game-height, 600px) * .05), 3rem); }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__mini-felt {
+    grid-template-rows: clamp(2.5rem, calc(var(--desktop-game-height, 600px) * .09), 5.5rem) clamp(1.9rem, calc(var(--desktop-game-height, 600px) * .065), 4.2rem);
+  }
   body.layout-basic[data-desktop-page] .info-rail .quest-banner { border: 0; background: none; }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub {
     display: grid; grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); gap: .7rem; height: 100%; border: 0;
@@ -633,16 +677,30 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
 @media (min-width: 1100px) {
   body.layout-basic[data-desktop-page] .info-rail .quest-hub { padding: 0; grid-template-columns: minmax(0, 2.25fr) minmax(16rem, 1fr); }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub .app-quest-panel {
-    display: grid; grid-template-columns: 6.4rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+    display: grid; grid-template-columns: 7.4rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
     gap: .5rem; min-height: 0; height: 100%; padding: 0;
   }
   body.layout-basic[data-desktop-page] .info-rail .app-quest-panel::before { display: none; }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header {
     grid-area: 1 / 1;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 0; margin: 0; padding: 0; gap: .3rem;
+    min-width: 0; min-height: 0; margin: 0; padding: .25rem .35rem; gap: .35rem;
   }
-  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header h2 { order: -1; font-size: .85rem; }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header h2 { order: -1; margin: 0; font-size: .8rem; }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header :is(.qst-streak-chip, .qst-score-control) {
+    box-sizing: border-box; display: grid; width: 100%; min-width: 0; min-height: 2rem;
+    align-items: center; gap: .3rem; padding: .3rem .4rem; border-radius: 5px;
+    text-align: left; outline-offset: 1px;
+  }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header .qst-streak-chip {
+    grid-template: 'gem value label' auto / auto auto minmax(0, 1fr);
+  }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header .qst-score-control { grid-template-columns: auto minmax(0, 1fr); }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header :is(.qst-streak, .qst-score-value) { font-size: 1rem; line-height: 1; }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header .qst-streak-flame { font-size: .6rem; }
+  body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-header :is(.qst-streak-label, .qst-score-label) {
+    min-width: 0; font-size: .48rem; line-height: 1.15; letter-spacing: .045em; white-space: normal;
+  }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub .qst-slots { grid-area: 1 / 2; min-height: 0; grid-template-rows: minmax(0, 1fr); height: 100%; }
   /* Loading and empty states occupy the cards' space, without adding a
      second grid row beneath the streak and rating. */
@@ -671,6 +729,37 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
 }
 
 @media (min-width: 1100px) and (max-height: 840px) {
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry { padding-block: .25rem; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__head {
+    flex-basis: clamp(3.2rem, calc(var(--desktop-game-height, 600px) * .12), 7rem);
+  }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__run-it-up-mark {
+    --craps-runup-width: min(80cqi, calc((clamp(3.2rem, var(--desktop-game-height, 600px) * .12, 7rem) - 1.2rem) * 3.25));
+  }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__display-face { grid-template-columns: minmax(0, 1fr) 8.5rem; grid-template-rows: minmax(0, 1fr); }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__logo-deck { grid-area: 1 / 1; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__header-metrics { grid-area: 1 / 2; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: .1rem; padding: .12rem; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__header-metrics > * { min-height: 0; height: 100%; box-sizing: border-box; padding-block: 0; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__header-metrics :is(.craps-entry__daily-added > strong, .craps-entry__progressive-meter) { font-size: .9rem; line-height: 1; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__header-metrics .craps-entry__flip-mark { width: 1rem; height: 1rem; flex-basis: 1rem; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__listing thead th { height: .9rem; padding-block: .1rem; line-height: 1.1; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__listing tbody :is(th, td) { padding-block: .04rem; line-height: 1; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__listing tbody :is(th, td),
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__money strong,
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__listing tbody th time { font-size: .85rem; line-height: 1; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__entrants { font-size: .85rem !important; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__result strong { font-size: .8rem; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__listing tbody tr:not(.craps-entry__results-head) { height: clamp(1.3rem, calc(var(--desktop-game-height, 600px) * .052), 2.5rem); }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__action > button,
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__entered { display: block; margin-inline: auto; height: clamp(1.2rem, calc(var(--desktop-game-height, 600px) * .045), 2.2rem); font-size: .8rem; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__results-head { height: 1rem !important; }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__surface-strip { min-height: clamp(1.5rem, calc(var(--desktop-game-height, 600px) * .05), 3rem); }
+  body.layout-basic[data-desktop-page] .play-grid .craps-entry__mini-felt { grid-template-rows: clamp(2rem, calc(var(--desktop-game-height, 600px) * .08), 4rem) clamp(1.5rem, calc(var(--desktop-game-height, 600px) * .06), 3rem); }
+  body.layout-basic[data-desktop-page] .play-grid .deg-block--wager { padding: .4rem .6rem; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-currency-picker { margin-bottom: .4rem; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-currency-option { min-height: 1.8rem; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-amount-presets { margin-top: .3rem; }
+  body.layout-basic[data-desktop-page] .play-grid .deg-block--wager .deg-place-cta { margin-top: .4rem; min-height: 2.4rem; padding-block: .35rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-head { gap: .5rem; padding-block: 0; }
   body.layout-basic[data-desktop-page] .info-rail .inv-head > h2 { max-width: 5rem; white-space: normal; }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-nav { padding: .2rem; gap: .3rem; }
