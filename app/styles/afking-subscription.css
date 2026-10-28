@@ -101,6 +101,9 @@ body.layout-basic .pass-whale-bulk {
 
 /* Account summary belongs to the desktop bar; the existing pass desk stays compact. */
 body.layout-basic .pass-afking__account { display: none; }
+body.layout-basic .pass-afking__intro { color: #a6bbc9; font: 500 .72rem/1.45 Inter, sans-serif; }
+body.layout-basic .pass-afking__intro[hidden] { display: none; }
+body.layout-basic .pass-afking:not([data-subscription-state="active"]) .pass-afking__current { font-family: Inter, sans-serif; }
 body.layout-basic .pass-afking__dialog--funding .pass-afking__dialog-card { width: min(26rem, 100%); }
 body.layout-basic .pass-afking__dialog--funding .pass-afking__controls { grid-template-columns: minmax(0, 1fr); }
 body.layout-basic .pass-afking__dialog--funding :is(.pass-afking__order-card, .pass-afking__steth, .pass-afking__lock,

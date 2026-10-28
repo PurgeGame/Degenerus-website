@@ -3,6 +3,7 @@
 .desktop-activity { display: contents; }
 .info-rail, .info-rail__track { display: contents; }
 .info-rail__nav, .info-rail__mining, .info-rail__feedback, .info-afking { display: none; }
+.rrt-caption { display: none; }
 body.layout-basic:not([data-desktop-page]) .desktop-sections { display: none; }
 body.layout-basic .inv-level-btn .inv-ticket-count { display: flex; flex-direction: column; align-items: center; gap: .18rem; }
 body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; letter-spacing: .025em; color: #b9bfce; }
@@ -180,23 +181,27 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   }
   body.layout-basic[data-desktop-page] .info-rail .rrt-stage { display: contents; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-tray {
-    --rrt-row-height: 4.5rem;
-    flex: none; width: 100%; height: 100%; min-height: 0; padding: .2rem; gap: 0 .4rem;
-    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "actions controls";
+    --rrt-row-height: min(5rem, calc(var(--info-panel-height) - .75rem));
+    flex: none; width: 100%; height: 100%; min-height: 0; padding: .25rem .6rem; gap: 0 .7rem;
+    grid-template-columns: 7.5rem minmax(0, 1fr) auto; grid-template-areas: "caption actions controls";
     align-items: center; border: 0; border-radius: 0;
     overflow: visible; background: none; box-shadow: none; backdrop-filter: none; animation: none;
   }
-  body.layout-basic[data-desktop-page] .info-rail .rrt-tray[data-has-rng="true"] { padding-left: 5.2rem; }
-  body.layout-basic[data-desktop-page] .info-rail .rrt-rng { top: .2rem; left: .2rem; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-tray[data-has-rng="true"] { padding-left: .6rem; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-rng { display: none !important; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-caption { display: grid; grid-area: caption; gap: .4rem; padding: .65rem .65rem .65rem 0; border-right: 1px solid #86799d33; text-align: left; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-caption small { color: #a7a0b6; font: 700 .52rem/1.2 Inter, sans-serif; letter-spacing: .07em; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-caption strong { color: #f0e9f9; font: 750 .72rem/1.3 Inter, sans-serif; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-actions {
-    --rrt-row-height: 4.5rem;
+    --rrt-row-height: min(5rem, calc(var(--info-panel-height) - .75rem));
     width: 100%; max-width: none; max-height: none; flex-wrap: nowrap;
     justify-content: flex-start; overflow: auto hidden; padding: .2rem;
   }
   body.layout-basic[data-desktop-page] .info-rail .rrt-action {
-    flex: 0 0 12rem; width: 12rem; max-width: 16rem; height: var(--rrt-row-height);
+    flex: 0 0 12.5rem; width: 12.5rem; max-width: 16rem; height: var(--rrt-row-height);
     grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto;
-    gap: .15rem .6rem; padding: .4rem .6rem;
+    gap: .3rem .65rem; padding: .4rem .65rem;
+    border: 1px solid #6a927d; border-radius: 8px; background: linear-gradient(120deg, #1d302a, #172221); box-shadow: none;
   }
   body.layout-basic[data-desktop-page] .info-rail .rrt-action__art {
     grid-area: 1 / 1 / 3 / 2; width: 2.75rem; height: 2.75rem;
@@ -206,23 +211,27 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .rrt-pack-art.rvl-pack { transform: scale(1.1); }
   body.layout-basic[data-desktop-page] .info-rail .rrt-degenerette-ticket { width: 2.75rem; height: 2.75rem; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-action__label {
-    max-width: none; font-size: .8rem; line-height: 1.2; letter-spacing: .02em;
+    max-width: none; font-size: .75rem; line-height: 1.25; letter-spacing: .01em;
   }
   body.layout-basic[data-desktop-page] .info-rail :is(.rrt-action__cta, .rrt-banner-state) {
-    display: block; grid-area: 2 / 2; align-self: start; font-size: .65rem; line-height: 1.2;
-    color: #ffd56f; font-weight: 900; letter-spacing: .05em;
+    display: block; grid-area: 2 / 2; align-self: start; justify-self: start; font-size: .52rem; line-height: 1.2;
+    color: #b0efd0; font-weight: 800; letter-spacing: .035em; padding: .2rem .35rem; border-radius: 4px; background: #5dab8930;
   }
-  body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting .rrt-banner-state { color: #b8c6d8; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting :is(.rrt-banner-state, .rrt-action__cta) { color: #cfbfdc; background: #b497cc1a; }
   body.layout-basic[data-desktop-page] .info-rail :is(.rrt-lootbox-summary, .rrt-degenerette-summary) { justify-content: start; gap: .2rem; }
   body.layout-basic[data-desktop-page] .info-rail :is(.rrt-lootbox-summary__amount, .rrt-degenerette-summary__amount) { font-size: .9rem; }
-  body.layout-basic[data-desktop-page] .info-rail :is(.rrt-lootbox-summary__status, .rrt-craps-summary__status) { font-size: .68rem; }
+  body.layout-basic[data-desktop-page] .info-rail :is(.rrt-lootbox-summary__status, .rrt-craps-summary__status) { font-size: .6rem; font-weight: 600; color: #c3bdd0; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-lootbox-mini { width: 2.75rem; height: 2.75rem; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-action--lootbox-stacks .rrt-action__art { width: auto; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-lootbox-stacks { height: 3rem; gap: .3rem; align-items: center; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-lootbox-stack { width: 2.5rem; height: 3rem; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-lootbox-stack__case { width: 2.5rem !important; height: 3rem !important; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-lootbox-stack__count { font-size: .7rem; }
-  body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting { opacity: .8; filter: none; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting { opacity: 1; filter: none; border-color: #645473; background: linear-gradient(120deg, #282132, #201d29); }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting .rrt-action__art { opacity: 1; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action.is-waiting .rrt-action__label { color: #e5daee; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-action--degenesis .rrt-action__icon-front { width: 3rem; height: 3rem; object-fit: contain; }
+  body.layout-basic[data-desktop-page] .info-rail .rrt-degenesis-summary { display: grid; gap: .2rem; white-space: normal; }
   body.layout-basic[data-desktop-page] .info-rail .rrt-pending-details:not([hidden]) {
     position: fixed; left: 50%; bottom: calc(var(--info-rail-height) + .5rem);
     transform: translateX(-50%); width: min(50rem, calc(100vw - 2rem));
@@ -383,36 +392,34 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn small { font-size: .8rem; }
   body.layout-basic[data-desktop-page] .info-rail .inv-level-btn strong { font-size: 1.15rem; }
 
-  /* Compact pass shop beside the live subscription controls. */
-  body.layout-basic[data-desktop-page] .info-afking .pass-shop { width: 100%; height: 100%; min-width: 0; padding: 0 .4rem; box-sizing: border-box; }
-  body.layout-basic[data-desktop-page] .pass-shop__offers { display: flex; gap: .5rem; width: 100%; height: 100%; align-items: center; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer {
-    display: flex; flex: 0 0 4.25rem; flex-direction: column; align-items: center; justify-content: center;
-    gap: .3rem; min-width: 0; padding: .35rem .3rem; min-height: 60px; border: 1px solid #476778; border-radius: 7px;
-    background: linear-gradient(145deg, #16333f, #11232e); color: #c6f4e6;
-    font-family: Inter, sans-serif; text-align: center; box-shadow: inset 0 1px #b8dfff15;
-  }
-  body.layout-basic[data-desktop-page] .pass-shop__offer strong { font-size: .6rem; line-height: 1.1; letter-spacing: .035em; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer small { color: #9eb1be; font-size: .51rem; line-height: 1.2; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer b { font-size: .85rem; line-height: 1.1; overflow-wrap: anywhere; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer--whale { border-color: #786443; background: linear-gradient(145deg, #3e321e, #251f19); color: #ffe4a3; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer--deity { border-color: #a58a48; background: linear-gradient(145deg, #493a17, #292416); color: #ffe5a0; }
-  body.layout-basic[data-desktop-page] .pass-shop__offer:disabled { opacity: .6; cursor: default; }
+  /* Aligned pass cards: one price line, with Whale quantity inside its card. */
+  body.layout-basic[data-desktop-page] .info-afking .pass-shop { width: 100%; height: 100%; min-width: 0; padding: .25rem .4rem; box-sizing: border-box; }
+  body.layout-basic[data-desktop-page] .pass-shop__offers { display: flex; gap: .6rem; width: 100%; height: 100%; align-items: stretch; }
+  body.layout-basic[data-desktop-page] .pass-shop__purchases { display: flex; flex: 0 0 auto; align-items: stretch; gap: .4rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer,
   body.layout-basic[data-desktop-page] .pass-shop__whale {
-    display: grid; flex: 0 0 7.5rem; min-width: 0; grid-template-columns: minmax(0, 1fr);
-    gap: .15rem;
+    box-sizing: border-box; width: clamp(5.5rem, 8vw, 7.25rem); min-width: 0; height: 100%;
+    border: 1px solid #426c6b; border-radius: 8px; background: linear-gradient(155deg, #183735, #111f25);
+    color: #c6f4e6; box-shadow: inset 0 1px #c5fff51a;
   }
-  body.layout-basic[data-desktop-page] .pass-shop__quantity {
-    display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) 1.6rem; align-content: center; align-items: center;
-    border: 1px solid #6c6040; border-radius: 6px; background: #171a20;
+  body.layout-basic[data-desktop-page] .pass-shop__offer {
+    display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: .3rem; min-height: 0; padding: .4rem; font-family: Inter, sans-serif; text-align: center;
   }
-  body.layout-basic[data-desktop-page] .pass-shop__quantity button { min-width: 0; height: 22px; min-height: 22px; padding: 0; border: 0; border-radius: 4px; background: #393428; color: #ffe4a3; font-size: 1rem; }
-  body.layout-basic[data-desktop-page] .pass-shop__quantity input { width: 100%; height: 22px; min-height: 22px; padding: 0; border: 0; background: transparent; appearance: textfield; min-width: 0; font: 700 .8rem/1.1 'Roboto Mono', monospace; text-align: center; color: #fff2cd; }
-  body.layout-basic[data-desktop-page] .pass-shop__bulk { grid-column: 1 / -1; color: #a6edb8; font: 800 .53rem/1.2 Inter, sans-serif; text-align: center; }
-  body.layout-basic[data-desktop-page] .pass-shop__brand { flex: 0 0 3.2rem; padding: 0; border: 0; background: none; box-shadow: none; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer strong { font-size: .65rem; line-height: 1.1; letter-spacing: .025em; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer small { color: #acbabc; font-size: .52rem; line-height: 1.1; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer b { font: 750 .9rem/1.1 'Roboto Mono', monospace; white-space: nowrap; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale { display: grid; grid-template-rows: minmax(0, 1fr) 22px auto; gap: .2rem; padding: .2rem; border-color: #806c46; background: linear-gradient(155deg, #352d20, #211d19); color: #ffe4a3; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer { width: 100%; border: 0; border-radius: 5px; padding: .1rem; gap: .15rem; background: transparent; color: inherit; box-shadow: none; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer--deity { border-color: #9a8052; background: linear-gradient(155deg, #41321e, #251e1a); color: #ffe5a0; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer:not(:disabled):hover { background-color: #ffffff0b; filter: brightness(1.15); }
+  body.layout-basic[data-desktop-page] .pass-shop__offer:disabled { opacity: .6; cursor: default; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) 1.5rem; align-items: center; border: 1px solid #6c6040; border-radius: 5px; background: #13171a; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity button { min-width: 0; height: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 3px; background: #393428; color: #ffe4a3; font-size: 1rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity input { width: 100%; height: 20px; min-height: 20px; padding: 0; border: 0; background: transparent; appearance: textfield; min-width: 0; font: 700 .75rem/1 'Roboto Mono', monospace; text-align: center; color: #fff2cd; }
+  body.layout-basic[data-desktop-page] .pass-shop__bulk { color: #bbccaa; font: 700 .46rem/1.2 Inter, sans-serif; text-align: center; white-space: nowrap; }
+  body.layout-basic[data-desktop-page] .pass-shop__brand { flex: 0 0 2.6rem; align-self: center; padding: 0; border: 0; background: none; box-shadow: none; }
   body.layout-basic[data-desktop-page] .pass-shop__brand img { display: block; width: 100%; height: auto; }
-  body.layout-basic[data-desktop-page] .pass-shop__purchases { display: flex; flex: 0 0 auto; align-items: center; gap: .3rem; }
-  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer { min-height: 45px; gap: .15rem; }
   body.layout-basic[data-desktop-page] .pass-shop__quantity input::-webkit-inner-spin-button { appearance: none; }
   body.layout-basic[data-desktop-page] .pass-shop__subscription { flex: 1 1 0; min-width: 0; height: 100%; }
   body.layout-basic[data-desktop-page] .pass-shop [hidden] { display: none !important; }
@@ -447,10 +454,17 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
     box-sizing: border-box; width: 100%; min-width: 0; min-height: 30px; height: auto; margin: 0; padding: .35rem .25rem;
     font-size: .57rem; line-height: 1.15; letter-spacing: .01em; white-space: normal; overflow-wrap: anywhere;
   }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__add-funding { grid-area: 1 / 1; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__claim-button { grid-area: 1 / 2; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__withdraw { grid-area: 2 / 1; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__edit { grid-area: 2 / 2; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__add-funding { order: 1; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__claim-button { order: 2; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__withdraw { order: 3; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__edit { order: 4; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking[data-has-account="false"] { grid-template-columns: minmax(0, 1fr) auto; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking[data-has-account="false"] .pass-afking__quick { grid-column: 2; grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) { border-color: #3b6966; background: linear-gradient(110deg, #153531, #12252a); }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__current { color: #eefbf6; font: 750 1.05rem/1.2 Inter, sans-serif; letter-spacing: -.02em; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__intro { max-width: 34ch; font-size: .68rem; line-height: 1.4; color: #abc7c2; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__edit { min-height: 2.5rem; padding: .5rem .75rem; border: 1px solid #8ed4b5; background: linear-gradient(#a8e3c4, #70bea3); color: #0d2922; font-size: .65rem; font-weight: 850; white-space: nowrap; box-shadow: inset 0 1px #dcffee66; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__edit:hover { filter: brightness(1.08); }
   body.layout-basic[data-desktop-page] .info-afking [hidden] { display: none !important; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking-error--inline {
     position: fixed; bottom: calc(var(--info-rail-height) + .5rem); left: 50%; transform: translateX(-50%);
@@ -663,7 +677,7 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .quest-hub .pari-side__cta { min-height: 28px; }
   body.layout-basic[data-desktop-page] .info-rail .quest-hub .pari-prebet-bonus__value { font-size: .6rem; line-height: 1; }
 
-  body.layout-basic[data-desktop-page] .info-rail :is(.rrt-tray, .rrt-actions) { --rrt-row-height: 3.75rem; }
+  body.layout-basic[data-desktop-page] .info-rail :is(.rrt-tray, .rrt-actions) { --rrt-row-height: calc(var(--info-panel-height) - .75rem); }
   body.layout-basic[data-desktop-page] .info-rail .mobile-event-summary { min-height: 64px; padding: .4rem .8rem; }
   body.layout-basic[data-desktop-page] .info-rail .dbb { --dbb-control-height: 3.25rem; padding-block: .25rem; }
   body.layout-basic[data-desktop-page] .info-rail .dbb:has(.dbb__feedback:not([hidden])) { --dbb-control-height: 2.75rem; }
@@ -689,12 +703,19 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
 
   body.layout-basic[data-desktop-page] .pass-shop__offer { gap: .2rem; padding-block: .25rem; }
   body.layout-basic[data-desktop-page] .pass-shop__subscription { gap: .2rem; padding-block: 0; }
-  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer { min-height: 32px; padding-block: .15rem; }
-  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer small { display: none; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale { gap: .1rem; grid-template-rows: minmax(0, 1fr) 20px; padding: .15rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__bulk { display: none; }
+  body.layout-basic[data-desktop-page] .pass-shop__whale .pass-shop__offer { gap: .1rem; padding: 0; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer strong { font-size: .59rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__offer b { font-size: .8rem; }
+  body.layout-basic[data-desktop-page] .pass-shop__quantity :is(button, input) { height: 18px; min-height: 18px; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking:not([data-subscription-state="active"]) .pass-afking__current { font-size: .85rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__intro { font-size: .59rem; line-height: 1.25; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking { padding-block: .25rem; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking__account { gap: .3rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-afking__head { gap: .25rem; }
-  body.layout-basic[data-desktop-page] .info-afking .pass-product-copy { gap: .2rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__head { gap: .1rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-afking__current { font-size: .65rem; }
+  body.layout-basic[data-desktop-page] .info-afking .pass-product-copy { gap: .1rem; }
   body.layout-basic[data-desktop-page] .info-afking .pass-afking__quick > button { min-height: 26px; padding-block: .25rem; }
 
 
