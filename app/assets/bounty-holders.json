@@ -1,0 +1,77 @@
+{
+  "chainId": 84532,
+  "coinflip": "0x78c034dae07a95beda938fc287ea1ba906923dc0",
+  "blockNumber": 51281262,
+  "records": [
+    {
+      "kind": 0,
+      "player": null,
+      "value": "0",
+      "barToBeat": "0",
+      "totalPaidFlip": null,
+      "totalPaidSdgnrs": null,
+      "claimCount": null,
+      "blockNumber": null,
+      "lastClaimBlock": null,
+      "clockDay": 1,
+      "transactionHash": null,
+      "logIndex": null
+    },
+    {
+      "kind": 1,
+      "player": null,
+      "value": "0",
+      "barToBeat": "0",
+      "totalPaidFlip": null,
+      "totalPaidSdgnrs": null,
+      "claimCount": null,
+      "blockNumber": null,
+      "lastClaimBlock": null,
+      "clockDay": 1,
+      "transactionHash": null,
+      "logIndex": null
+    },
+    {
+      "kind": 2,
+      "player": "0x6f5bf09ddbf22699a4dcf2ae37e923c601317cef",
+      "value": "20000000000000",
+      "barToBeat": "24000000000000",
+      "totalPaidFlip": null,
+      "totalPaidSdgnrs": null,
+      "claimCount": null,
+      "blockNumber": 51137118,
+      "lastClaimBlock": 51137118,
+      "clockDay": 2,
+      "transactionHash": "0xfb37031b2b1bd353d49230d26ca39efbddce987f8efc36973d51ea007ab0405f",
+      "logIndex": 3
+    },
+    {
+      "kind": 3,
+      "player": "0x606aa6ae440385a52e27950dba43248f22a5b346",
+      "value": "2660",
+      "barToBeat": "3192",
+      "totalPaidFlip": null,
+      "totalPaidSdgnrs": null,
+      "claimCount": null,
+      "blockNumber": 51201915,
+      "lastClaimBlock": 51201915,
+      "clockDay": 13,
+      "transactionHash": "0x094440173933a9f2bc5038006dcfc8870f7f1fb867e8a51e0603fbbea6dbae61",
+      "logIndex": 3
+    },
+    {
+      "kind": 4,
+      "player": "0xe7b323822515b350a23c4c9d89cf7dfb5b7d007d",
+      "value": "1963577",
+      "barToBeat": "1963578",
+      "totalPaidFlip": null,
+      "totalPaidSdgnrs": null,
+      "claimCount": null,
+      "blockNumber": 51183805,
+      "lastClaimBlock": 51183805,
+      "clockDay": 10,
+      "transactionHash": "0x5de8727f063234c00a2858a394bcfed66c020be1055dec6e8145b3fd0a82f3a7",
+      "logIndex": 30
+    }
+  ]
+}
