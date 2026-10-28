@@ -4014,6 +4014,7 @@ app-craps-table {
 
 .craps-race-result__performance strong,
 .craps-race-result__winner-peak strong,
+.craps-race-result__winner-payout strong,
 .craps-race-result__money strong {
   display: flex;
   min-width: 0;
@@ -4032,7 +4033,7 @@ app-craps-table {
 }
 
 .craps-race-result__performance img,
-.craps-race-result__winner-peak img,
+.craps-race-result__winner-payout img,
 .craps-race-result__money img {
   display: block;
   width: 1.5rem;
@@ -4056,10 +4057,11 @@ app-craps-table {
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: 3.2rem minmax(0, 1fr) auto;
+  container: craps-winner / inline-size;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .65fr) minmax(0, 1.2fr);
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem;
+  gap: 0.8rem;
+  padding: 0.85rem;
   box-sizing: border-box;
   border: 1px solid rgba(245, 202, 98, 0.28);
   border-radius: 0.45rem;
@@ -4088,28 +4090,50 @@ app-craps-table {
   object-fit: cover;
 }
 
-.craps-race-result__winner > span:nth-child(2) {
+.craps-race-result__winner-player > span:nth-child(2) {
   display: grid;
   min-width: 0;
   gap: 0.28rem;
 }
 
-.craps-race-result__winner > span:nth-child(2) > strong {
-  overflow: hidden;
-  color: #f4ead0;
-  font: 1000 1rem/1 "Roboto Mono", monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.craps-race-result__winner-peak {
+.craps-race-result__winner-player {
   display: grid;
-  justify-items: end;
-  gap: 0.28rem;
+  grid-template-columns: 3.1rem minmax(0, 1fr);
+  align-items: center;
+  gap: .6rem;
+  min-width: 0;
 }
 
-.craps-race-result__winner-peak strong {
-  font-size: 1rem;
+.craps-race-result__winner-player > span:nth-child(2) > strong {
+  color: #f4ead0;
+  font: 1000 1rem/1.2 "Roboto Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.craps-race-result__winner-peak,
+.craps-race-result__winner-payout {
+  display: grid;
+  min-width: 0;
+  justify-items: end;
+  gap: .45rem;
+}
+
+.craps-race-result__winner-peak strong { color: #e0e8df; font-size: clamp(1.1rem, 5cqi, 1.35rem); }
+.craps-race-result__winner-payout { container-type: inline-size; }
+.craps-race-result__winner-payout small { color: #f5ca62; }
+.craps-race-result__winner-payout strong {
+  justify-content: flex-end;
+  width: 100%;
+  font-size: min(2.25rem, calc((100cqi - .32rem) / var(--craps-winner-payout-units)));
+  line-height: 1.1;
+}
+.craps-race-result__winner-payout strong > span { min-width: 0; white-space: nowrap; }
+.craps-race-result__winner-payout img { width: .85em; height: .85em; flex-basis: .85em; }
+
+@container craps-winner (max-width: 500px) {
+  .craps-race-result__winner-player { grid-column: 1 / -1; }
+  .craps-race-result__winner-peak { grid-column: 1; justify-items: start; }
+  .craps-race-result__winner-payout { grid-column: 2 / -1; }
 }
 
 .craps-race-result__card h2.is-placement { display: grid; gap: 0.3rem; justify-items: center; }
