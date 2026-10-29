@@ -914,19 +914,80 @@
     justify-content: stretch;
     gap: 0.35rem;
   }
-  body.layout-basic #panel-passes .pass-product-checkout--whale { grid-template-columns: 8.5rem minmax(0, 1fr); }
-  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-product-quantity {
-    grid-column: 1;
-    grid-template-columns: auto minmax(1.6rem, 1fr) 3.6rem;
-  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale { grid-template-columns: 9rem minmax(0, 1fr); }
   body.layout-basic #panel-passes .pass-product-checkout--whale .pass-whale-buy { grid-column: 2; }
-  body.layout-basic #panel-passes .pass-product-checkout--whale :is(.pass-product-quantity, .pass-whale-buy, .pass-whale-input),
   body.layout-basic #panel-passes .pass-product-row :is(.pass-whale-buy, .pass-lazy-buy) {
     width: 100%;
     height: 2.3rem;
     min-height: 2.3rem;
     max-height: 2.3rem;
     padding-block: 0.15rem;
+  }
+  /* One centered amount, with full-height touch controls on either side. */
+  body.layout-basic #panel-passes .pass-product-checkout--whale :is(.pass-product-quantity, .pass-whale-buy) {
+    width: 100%;
+    height: 2.875rem;
+    min-height: 2.875rem;
+    max-height: 2.875rem;
+  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-product-quantity {
+    grid-column: 1;
+    grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+    grid-template-rows: 0.875rem minmax(0, 1fr);
+    padding: 0;
+    background: #101e2e;
+    box-shadow: inset 0 1px 0 #dbefff0d;
+  }
+  body.layout-basic #panel-passes .pass-product-quantity > small {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 0.25rem 0 0;
+    text-align: center;
+    color: #aac4d9;
+    font-size: 0.5rem;
+    letter-spacing: 0.08em;
+  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-whale-input {
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    padding: 0 0 0.2rem;
+    border: 0;
+    box-shadow: none;
+    font-size: 1rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-whale-steps { display: contents; }
+  body.layout-basic #panel-passes .pass-whale-steps button {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    font: 500 1.35rem/1 sans-serif;
+    border: 0;
+    border-radius: 0;
+    background: #6fb7ff0d;
+  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-whale-steps [data-bind="pass-whale-qty-down"] {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    border-right: 1px solid #6fb7ff30;
+  }
+  body.layout-basic #panel-passes .pass-product-checkout--whale .pass-whale-steps [data-bind="pass-whale-qty-up"] {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    border-left: 1px solid #6fb7ff30;
+  }
+  body.layout-basic #panel-passes .pass-product-quantity:focus-within {
+    border-color: #a3d3ff;
+    box-shadow: 0 0 0 2px #6fb7ff26;
+  }
+  body.layout-basic #panel-passes .pass-product-quantity :is(input, button):focus-visible {
+    outline-offset: -3px;
   }
 
   /* Deity shelf: the luckbox chip shares the buy row. */
