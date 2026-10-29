@@ -22,7 +22,7 @@ export function decimatorBattleFixture({ wideStacks = false } = {}) {
     if (generated && !eligible) continue;
     const owner = address(generated ? 1 + id % 8 : id);
     names.set(owner, { name: `${labels[(Number(BigInt(owner)) - 1) % labels.length]} ${Number(BigInt(owner))}` });
-    const entry = { entryId: String(id), address: owner, generated, eligible, chips: id % 3 ? 2 << 9 : 0,
+    const entry = { entryId: String(id), walletId: Number(BigInt(owner)), address: owner, generated, eligible, chips: id % 3 ? 2 << 9 : 0,
       stack: String((generated ? totalStack / 24n : stacks[id - 1]) * WEI), peak: null, score: null,
       tieKey: String(decimatorTieKey(snapshot.rngWord, snapshot.level, id)) };
     if (eligible) {
