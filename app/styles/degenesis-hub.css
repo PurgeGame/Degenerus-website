@@ -253,6 +253,36 @@ body.layout-basic .dgx-dialog .qst-action-dialog__sigil img {
 }
 body.layout-basic .dgx-dialog__body { display: grid; gap: 0.6rem; }
 
+body.layout-basic .dgx-payment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+body.layout-basic .dgx-payment[hidden] { display: none; }
+body.layout-basic .dgx-payment > span { color: #cbb98f; font: 800 .65rem/1.2 Inter, sans-serif; letter-spacing: .06em; }
+body.layout-basic .dgx-payment__choices { display: flex; gap: .2rem; padding: .2rem; border: 1px solid #78603b; border-radius: 10px; background: #120f18; }
+body.layout-basic .dgx-payment__choices button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 2.5rem;
+  min-width: 5rem;
+  padding: .35rem .7rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #bdb6c7;
+  font: 850 .8rem/1 Inter, sans-serif;
+  cursor: pointer;
+}
+body.layout-basic .dgx-payment__choices img { width: 1.4rem; height: 1.4rem; object-fit: contain; }
+body.layout-basic .dgx-payment__choices button[aria-pressed="true"] { border-color: #b58a36; color: #fff0be; background: #554020; }
+body.layout-basic .dgx-payment__choices button:hover:not(:disabled) { background: #3c3024; color: #fff; }
+body.layout-basic .dgx-payment__choices button:focus-visible { outline: 2px solid #ffd166; outline-offset: 2px; }
+body.layout-basic .dgx-payment__choices button:disabled { cursor: default; opacity: .55; }
+
 body.layout-basic .dgx-dialog .dgx-shelf { gap: 0; }
 body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-pieces {
   grid-template-columns: repeat(3, minmax(0, 1fr));
