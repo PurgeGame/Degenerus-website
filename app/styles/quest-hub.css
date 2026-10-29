@@ -1,3 +1,10 @@
+/* Wildcard artwork already contains its colored ring and inner disc. */
+body.layout-basic .qst-action-dgn__choice img[data-badge="full"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 /* Quests, the live Growth book, and referrals share the left game column. */
 body.layout-basic .play-grid > .quest-hub {
   grid-area: quests;
