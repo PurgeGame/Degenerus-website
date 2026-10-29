@@ -1,4 +1,5 @@
 import { decimatorPayoutBreakdown } from '../app/app/decimator-payout.js';
+import { formatWhalePassAward } from '../app/app/whale-pass-format.js';
 import { fetchProfiles } from '../app/app/profiles.js';
 import {
   sfxFanfare,
@@ -142,9 +143,8 @@ export function formatDecimatorSettlement(totalWei, displayScale = 1n, options =
     };
   }
 
-  const passCount = split.halfPasses.toLocaleString('en-US');
   const rewardParts = [
-    `${passCount} WHALE HALF-${split.halfPasses === 1n ? 'PASS' : 'PASSES'}`,
+    formatWhalePassAward(split.halfPasses).toUpperCase(),
   ];
   if (split.luckboxWei > 0n) {
     rewardParts.push(`${settlementEthLabel(split.luckboxWei, displayScale)} LUCKBOX`);
@@ -154,8 +154,8 @@ export function formatDecimatorSettlement(totalWei, displayScale = 1n, options =
     claimableLabel: claimable,
     rewardLabel: rewardParts.join(' + '),
     ruleLabel: split.recirculatedDustWei > 0n
-      ? 'WHALE HALF-PASSES · SMALL ON-CHAIN REMAINDER RECIRCULATED'
-      : 'WHALE HALF-PASSES · LUCKBOX REMAINDER WHEN ELIGIBLE',
+      ? 'WHALE PASSES · SMALL ON-CHAIN REMAINDER RECIRCULATED'
+      : 'WHALE PASSES · LUCKBOX REMAINDER WHEN ELIGIBLE',
   };
 }
 
