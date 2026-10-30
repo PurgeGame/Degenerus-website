@@ -644,3 +644,19 @@ body.layout-basic .records-rail__leader-bet{background:transparent;box-shadow:no
 
 /* Viewed battles remain quiet, but can be replayed deliberately from the diamond. */
 body.layout-basic .replay-ticket-center.replay-ticket-center--craps-seen[aria-disabled="false"]{cursor:pointer}
+
+/* Applicable objectives and one-use boons, clear of the center diamond. */
+body.layout-basic #site-buy-board .concept-game{position:relative}
+body.layout-basic #site-buy-board .site-tile-indicators{
+  position:absolute;z-index:6;top:8px;left:8px;display:flex;align-items:center;gap:5px;
+  width:max-content;max-width:calc(100% - 16px);pointer-events:none;
+}
+body.layout-basic #site-buy-board [data-dgx-kind="passes"] .site-tile-indicators,
+body.layout-basic #site-buy-board .concept-game .site-tile-indicators{left:auto;right:8px}
+body.layout-basic #site-buy-board .site-craps-cell .site-tile-indicators{top:auto;bottom:32px}
+body.layout-basic #site-buy-board .site-degenerette-cell .site-tile-indicators{top:3px}
+body.layout-basic #site-buy-board .site-tile-indicators>boon-product-indicator,
+body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicator{
+  position:relative;inset:auto;flex:none;width:clamp(20px,1.8vw,28px);height:clamp(20px,1.8vw,28px);
+  margin:0;transform:none;animation:none;pointer-events:auto;
+}
