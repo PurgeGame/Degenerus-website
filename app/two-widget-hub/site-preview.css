@@ -616,3 +616,31 @@ body.layout-basic .action-feedback[hidden] { display: none !important; }
 @media(min-width:1100px){
   body.layout-basic .jackpot-hero>app-daily-flip{height:98.4%;min-height:0;align-self:center}
 }
+
+/* Clip the raster's rectangular backing to the original engraved outline. */
+body.layout-basic .records-rail__leader-card-art{
+  mask:url('./art/bounty-plaque-mask.svg') center / 100% 100% no-repeat;
+  filter:none;
+}
+body.layout-basic .records-rail__leader-bet{background:transparent;box-shadow:none}
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__summary{grid-template-columns:116px minmax(0,1fr);gap:14px;padding:8px 10px;align-items:center}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__wordmark{width:100%}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__wordmark img{max-height:66px;object-position:center}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders{gap:8px}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader{container-type:inline-size}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title{top:10%;bottom:48%;gap:3px;padding:0 1%;letter-spacing:.025em}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title>span{font-size:clamp(7px,4.5cqi,12px);line-height:1;-webkit-text-stroke:0}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title>strong{font-size:clamp(8px,5.7cqi,15px);line-height:1.1;letter-spacing:.03em}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-holder{font-size:clamp(7px,4.7cqi,12px);line-height:1.15;font-weight:700}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-value{font-size:clamp(8px,5.8cqi,15px)}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader .records-rail__portrait{top:4%;width:75%;max-height:71%;max-width:none}
+  @container hub-rail (max-width:900px){
+    body.layout-basic[data-desktop-page] .info-rail .records-rail__summary{grid-template-columns:90px minmax(0,1fr);gap:8px;padding-inline:6px}
+    body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders{gap:5px}
+    body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title{gap:1px}
+  }
+}
+
+/* Viewed battles remain quiet, but can be replayed deliberately from the diamond. */
+body.layout-basic .replay-ticket-center.replay-ticket-center--craps-seen[aria-disabled="false"]{cursor:pointer}
