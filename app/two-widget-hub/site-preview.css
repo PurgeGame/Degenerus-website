@@ -661,48 +661,35 @@ body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicato
   margin:0;transform:none;animation:none;pointer-events:auto;
 }
 
-/* Three pass tickets need three readable rows, including the shared footer. */
+/* Keep the pass catalog inside the same 116px panel as every other tab. */
 @media(min-width:1100px){
-  body.layout-basic[data-desktop-info="afking"]:has(.pass-shop__subscription:not([hidden])){
-    --info-panel-height:148px;--info-rail-height:calc(var(--info-panel-height) + var(--info-nav-height) + 4px);
-  }
-  body.layout-basic[data-desktop-info="afking"]:has(.pass-shop__offer--lazy:not([hidden])):has(.pass-shop__offer--deity:not([hidden])){
-    --info-panel-height:164px;--info-rail-height:calc(var(--info-panel-height) + var(--info-nav-height) + 4px);
-  }
-  body.layout-basic[data-desktop-info="afking"]:has(.pass-shop__offer--lazy:not([hidden])):has(.pass-shop__offer--deity:not([hidden])):has(.pass-shop__subscription:not([hidden])){
-    --info-panel-height:180px;
-  }
-  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__purchases{grid-template-rows:none;grid-auto-rows:minmax(0,1fr)}
-  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__product{min-height:0;line-height:1;gap:1px 6px}
-  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__perks{height:auto;min-height:0;align-self:center;grid-template-rows:repeat(2,min-content)}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__purchases{grid-template-rows:none;grid-auto-rows:minmax(0,1fr);gap:4px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__offer{grid-template-columns:190px minmax(0,1fr)!important;padding-block:0}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__product{grid-template-columns:18px auto minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr);gap:5px;margin-block:0;padding-block:0;align-items:center;min-height:0}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__seal{grid-area:1 / 1;width:18px!important;height:18px!important;font-size:8px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__product strong{grid-area:1 / 2;font-size:10px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__product b{grid-area:1 / 3;font-size:13px!important;text-align:right;padding-right:5px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__perks{display:flex!important;flex-wrap:wrap;align-content:center;align-items:center;height:auto;min-height:0;gap:1px 9px!important;font-size:9px!important;line-height:1.1}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__perks>span{white-space:nowrap}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__bulk{font-size:8px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity{height:22px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity :is(button,input){height:20px}
   @container pass-catalog (max-width:750px){
-    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__perks{
-      display:flex!important;flex-wrap:wrap;align-content:center;
-      font-size:10px!important;line-height:1.15;gap:2px 10px!important;
-    }
-    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__perks>span{white-space:nowrap}
-    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__bulk{font-size:9px!important}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__offer{grid-template-columns:130px minmax(0,1fr)!important;gap:6px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__product b{font-size:10px!important}
   }
 }
-@media(min-width:1100px) and (max-width:1400px), (min-width:1100px) and (max-height:900px){
-  body.layout-basic[data-desktop-info="afking"]:has(.pass-shop__offer--lazy:not([hidden])):has(.pass-shop__offer--deity:not([hidden])){--info-panel-height:180px}
-}
-@media(min-width:1100px){
-  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__offer{grid-template-columns:140px minmax(0,1fr)!important}
-  @container pass-catalog (max-width:750px){
-    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__offer{grid-template-columns:120px minmax(0,1fr)!important}
-    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers .pass-shop__catalog .pass-shop__product b{font-size:14px!important}
-  }
-}
+
 /* At compact cabinet widths, keep subscription management below the logo. */
 @media(min-width:1100px){
   @container hub-rail (max-width:900px){
     body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has(>.pass-shop__subscription:not([hidden]) .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"])){
-      grid-template-columns:88px minmax(0,1fr);grid-template-rows:minmax(0,1fr) 48px;
+      grid-template-columns:88px minmax(0,1fr);grid-template-rows:minmax(0,1fr) 42px;
       grid-template-areas:"brand catalog" "subscription catalog";
     }
-    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has(>.pass-shop__subscription:not([hidden]) .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"])) .pass-shop__brand{grid-area:brand;align-self:center}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has(>.pass-shop__subscription:not([hidden]) .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"])) .pass-shop__brand{grid-area:brand;align-self:center;max-height:44px}
     body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has(>.pass-shop__subscription:not([hidden]) .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"])) .pass-shop__catalog{grid-area:catalog}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__brand img{max-height:44px;object-fit:contain}
     body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers>.pass-shop__subscription:has(.pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"])){grid-area:subscription;min-width:0}
     body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers>.pass-shop__subscription .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]){
       display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 28px;gap:3px;
