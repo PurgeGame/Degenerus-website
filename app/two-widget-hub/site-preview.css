@@ -590,3 +590,18 @@ body.layout-basic .action-feedback[hidden] { display: none !important; }
 
 /* Published layout uses the selected design without preview controls. */
 .site-palette-tools{display:none!important}
+
+/* Keep the desktop board and its rail together, centered as one composition. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace{margin:0!important;align-content:safe center;row-gap:0;padding:8px 0!important}
+  body.layout-basic[data-desktop-page] #app-workspace .jackpot-hero{margin:0}
+  body.layout-basic[data-desktop-page] #app-workspace>app-protocol-wallet-banner{margin:0}
+  body.layout-basic[data-desktop-page] .info-rail{position:relative;inset:auto;transform:none;justify-self:center;align-self:auto;border-bottom:1px solid #9c794d66;border-radius:10px}
+  body.layout-basic[data-desktop-page] #app-workspace>.gr[data-banner-style="original"]{--gr-edge:0px}
+  body.layout-basic[data-desktop-page] #app-workspace>.gr[data-banner-style="original"]::after{z-index:3;pointer-events:none;background-image:var(--hub-banner-outline,url('banner-original-frame.svg'))}
+  body.layout-basic[data-desktop-page] #app-workspace>.gr[data-banner-style="original"] .gr__amount-row{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;margin-left:0}
+  body.layout-basic[data-desktop-page] #app-workspace>.gr[data-banner-style="original"] .gr__amount{font-size:min(88cqh,10.5cqw)}
+  body.layout-basic[data-desktop-page] #app-workspace>.gr[data-banner-style="original"] .gr__unit-code{width:auto;margin:0;font-size:clamp(8px,7cqh,11px);letter-spacing:.12em;line-height:1;text-align:center;color:#cdb671}
+}
+
+@media(min-width:1100px){body.layout-basic[data-desktop-page] .info-rail__nav{border-radius:0 0 9px 9px}}
