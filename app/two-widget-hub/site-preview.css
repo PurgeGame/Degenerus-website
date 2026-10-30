@@ -605,3 +605,7 @@ body.layout-basic .action-feedback[hidden] { display: none !important; }
 }
 
 @media(min-width:1100px){body.layout-basic[data-desktop-page] .info-rail__nav{border-radius:0 0 9px 9px}}
+/* The cabinet art begins .8% inside its box; align Coinflip to that visible rim. */
+@media(min-width:1100px){
+  body.layout-basic .jackpot-hero>app-daily-flip{height:98.4%;min-height:0;align-self:center}
+}
