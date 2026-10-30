@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["jackpot-bar-time.js"],
+  "sourcesContent": ["export function formatHubJackpotCountdown(totalSeconds){\n  const seconds=Math.max(0,Math.floor(Number(totalSeconds)||0));\n  if(seconds>=3600)return `${Math.floor(seconds/3600)}:${String(Math.floor(seconds%3600/60)).padStart(2,'0')}`;\n  if(seconds>=120)return `${Math.floor(seconds/60)}m`;\n  return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;\n}\n"],
+  "mappings": "+EAAO,gBAAS,0BAA0BA,EAAa,CACrD,MAAMC,EAAQ,KAAK,IAAI,EAAE,KAAK,MAAM,OAAOD,CAAY,GAAG,CAAC,CAAC,EAC5D,OAAGC,GAAS,KAAY,GAAG,KAAK,MAAMA,EAAQ,IAAI,CAAC,IAAI,OAAO,KAAK,MAAMA,EAAQ,KAAK,EAAE,CAAC,EAAE,SAAS,EAAE,GAAG,CAAC,GACvGA,GAAS,IAAW,GAAG,KAAK,MAAMA,EAAQ,EAAE,CAAC,IACzC,GAAG,KAAK,MAAMA,EAAQ,EAAE,CAAC,IAAI,OAAOA,EAAQ,EAAE,EAAE,SAAS,EAAE,GAAG,CAAC,EACxE,CALgBC,EAAA",
+  "names": ["totalSeconds", "seconds", "__name"]
+}

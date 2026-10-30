@@ -1,0 +1,2 @@
+var a=Object.defineProperty;var r=(o,t)=>a(o,"name",{value:t,configurable:!0});export function formatHubJackpotCountdown(o){const t=Math.max(0,Math.floor(Number(o)||0));return t>=3600?`${Math.floor(t/3600)}:${String(Math.floor(t%3600/60)).padStart(2,"0")}`:t>=120?`${Math.floor(t/60)}m`:`${Math.floor(t/60)}:${String(t%60).padStart(2,"0")}`}r(formatHubJackpotCountdown,"formatHubJackpotCountdown");
+//# sourceMappingURL=jackpot-bar-time.js.map

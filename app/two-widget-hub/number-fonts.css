@@ -1,0 +1,41 @@
+@font-face{font-family:GTJ Anton;src:url('fonts/anton.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:GTJ Russo;src:url('fonts/russoone.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:GTJ Orbitron;src:url('fonts/orbitron.ttf') format('truetype');font-weight:400 900;font-display:swap}
+@font-face{font-family:GTJ Cinzel;src:url('fonts/cinzel.ttf') format('truetype');font-weight:400 900;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="anton"] .gr__amount{font-family:GTJ Anton,sans-serif;font-weight:400;letter-spacing:-.015em}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="russo"] .gr__amount{font-family:GTJ Russo,sans-serif;font-weight:400;letter-spacing:-.035em}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="orbitron"] .gr__amount{font-family:GTJ Orbitron,sans-serif;font-weight:800;letter-spacing:-.035em}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="cinzel"] .gr__amount{font-family:GTJ Cinzel,serif;font-weight:800;letter-spacing:-.055em}
+.concept-font-link{font:10px Inter,system-ui,sans-serif;color:#ddc58e;text-decoration:underline;text-underline-offset:3px}
+
+@font-face{font-family:GTJ archivoblack;src:url("fonts/archivoblack.ttf") format("truetype");font-weight:400;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="archivoblack"] .gr__amount{font-family:GTJ archivoblack,sans-serif;font-weight:400;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ barlowcondensed;src:url("fonts/barlowcondensed.ttf") format("truetype");font-weight:800;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="barlowcondensed"] .gr__amount{font-family:GTJ barlowcondensed,sans-serif;font-weight:800;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ sairacondensed;src:url("fonts/sairacondensed.ttf") format("truetype");font-weight:800;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="sairacondensed"] .gr__amount{font-family:GTJ sairacondensed,sans-serif;font-weight:800;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ teko;src:url("fonts/teko.ttf") format("truetype");font-weight:700;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="teko"] .gr__amount{font-family:GTJ teko,sans-serif;font-weight:700;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ oxanium;src:url("fonts/oxanium.ttf") format("truetype");font-weight:800;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="oxanium"] .gr__amount{font-family:GTJ oxanium,sans-serif;font-weight:800;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ chakrapetch;src:url("fonts/chakrapetch.ttf") format("truetype");font-weight:700;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="chakrapetch"] .gr__amount{font-family:GTJ chakrapetch,sans-serif;font-weight:700;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ audiowide;src:url("fonts/audiowide.ttf") format("truetype");font-weight:400;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="audiowide"] .gr__amount{font-family:GTJ audiowide,sans-serif;font-weight:400;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ rajdhani;src:url("fonts/rajdhani.ttf") format("truetype");font-weight:700;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="rajdhani"] .gr__amount{font-family:GTJ rajdhani,sans-serif;font-weight:700;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ blackopsone;src:url("fonts/blackopsone.ttf") format("truetype");font-weight:400;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="blackopsone"] .gr__amount{font-family:GTJ blackopsone,sans-serif;font-weight:400;letter-spacing:-.015em}
+
+@font-face{font-family:GTJ racingsansone;src:url("fonts/racingsansone.ttf") format("truetype");font-weight:400;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="racingsansone"] .gr__amount{font-family:GTJ racingsansone,sans-serif;font-weight:400;letter-spacing:-.015em}
+@font-face{font-family:GTJ Display Plain;src:url("fonts/gtj-display-plain.ttf") format("truetype");font-weight:400;font-display:swap}
+body.layout-basic[data-desktop-page] #app-workspace > .gr[data-number-font="audiowide"][data-zero-style="plain"] .gr__amount{font-family:GTJ Display Plain,sans-serif}

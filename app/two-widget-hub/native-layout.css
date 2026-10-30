@@ -1,0 +1,211 @@
+/* Layout-only study. All cabinet, ticket, coinflip and banner art comes from the app. */
+body.layout-basic{padding:0 18px 32px!important;overflow:auto!important}
+body.layout-basic #app-workspace{display:block!important;max-width:1160px;margin:22px auto;padding:0!important;transform:none!important}
+.concept-tools{position:relative;z-index:50;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;color:#b9bcb2;border-bottom:1px solid #383a31;font:11px Inter,system-ui,sans-serif}.concept-tools strong{font-size:10px;letter-spacing:1.5px;color:#ddc58e}.concept-tools label{display:flex;gap:6px;align-items:center}.concept-tools select,.concept-tools button{background:#191e19;color:#dedccd;padding:7px;border:1px solid #4a4d3e;border-radius:4px;font:inherit;cursor:pointer}.concept-tools button:hover{border-color:#e6bb66}
+body.layout-basic .jackpot-hero{grid-template-columns:minmax(0,1fr) 62px minmax(0,1fr)!important;grid-template-areas:"draw pool flip"!important;gap:14px;background:none;border:none;box-shadow:none;overflow:visible;align-items:start;margin-top:18px}
+body.layout-basic .jackpot-hero__draw{grid-area:draw;min-width:0;padding:0!important;border:0!important}
+body.layout-basic .jackpot-hero__draw::before{display:none}
+body.layout-basic .jackpot-hero > app-daily-flip{grid-area:flip;border:0!important;min-width:0;align-self:stretch}
+body.layout-basic .jackpot-hero__machine{width:100%;max-width:none}
+body.layout-basic .jackpot-hero replay-panel[hidden]{display:none!important}
+body.layout-basic .jackpot-hero__machine replay-panel[data-degenesis] .replay-ticket-center{pointer-events:auto;cursor:pointer}
+/* Keep the cabinet geometry steady while removing the redundant idle key. */
+body.layout-basic #buy-board .concept-key-idle{visibility:hidden!important;pointer-events:none!important}
+.concept-games{display:grid;grid-template-rows:1fr 1fr;width:100%;height:100%;min-height:0;background:#09100d}
+.concept-game{display:grid;place-items:center;width:100%;height:100%;min-height:0;min-width:0;padding:10% 6% 5%;border:0;border-radius:0;background:radial-gradient(ellipse at center,#ae794720,transparent 75%);cursor:pointer;transition:background .15s}
+.concept-game + .concept-game{padding:5% 6%;border-top:1px solid #7c806752;background:radial-gradient(ellipse at center,#744c9c25,transparent 75%)}
+.concept-game img{display:block;width:100%;height:100%;min-height:0;object-fit:contain;filter:drop-shadow(0 3px 3px #0008)}
+.concept-game:hover{background-color:#283329}
+.concept-game:focus-visible{outline:2px solid #e0c282;outline-offset:-3px}
+.concept-thermo{grid-area:pool;align-self:stretch;display:flex;align-items:center;flex-direction:column;gap:18px;padding:12px 0 9px;text-align:center;color:#e0d4a8;font-variant-numeric:tabular-nums}
+.concept-level{display:grid;justify-items:center;gap:3px;width:48px;padding:8px 0 7px;border:1px solid #81704466;border-radius:6px;background:linear-gradient(135deg,#2c3024,#10170f);box-shadow:inset 0 1px #e5d6a21a,0 3px 8px #0005}
+.concept-level small{font-size:8px;font-weight:700;letter-spacing:1.8px;color:#b0aa8d}
+.concept-level strong{font:800 23px/1 Inter,system-ui,sans-serif;color:#eee1b6;letter-spacing:-1px}
+.concept-track{flex:1;width:22px;min-height:160px;position:relative;border:1px solid #7c7953;border-radius:12px;background:linear-gradient(90deg,#030a06,#132019 50%,#050c07);box-shadow:0 0 0 3px #131a13,inset 2px 0 4px #000a}
+.concept-track>div{position:absolute;bottom:2px;left:2px;right:2px;height:calc(72% - 3px);border-radius:8px;background:linear-gradient(90deg,#587b38,#b8ce7a 45%,#6d9646);box-shadow:0 0 13px #9aba4520,inset 0 1px #e7f4ba}
+.concept-track>div:before{content:'';position:absolute;top:-1px;left:-3px;right:-3px;height:3px;border-radius:2px;background:#edf2b0;box-shadow:0 0 7px #d4e18d88}
+.concept-track:after{content:'';position:absolute;inset:5px -7px;background:repeating-linear-gradient(to top,transparent 0,transparent calc(10% - 1px),#acb58b55 calc(10% - 1px),#acb58b55 10%);mask:linear-gradient(90deg,#000 0 4px,transparent 4px calc(100% - 4px),#000 calc(100% - 4px));pointer-events:none}
+.concept-pool-amount{display:grid;gap:4px;white-space:nowrap}
+.concept-pool-amount>strong{font:750 20px/1 Inter,system-ui,sans-serif;color:#dde9b5;letter-spacing:-.7px}
+.concept-pool-amount>span{font-size:11px;color:#9fa68d}
+.concept-pool-amount small{font-size:8px;letter-spacing:.5px}
+#concept-status,.concept-note{text-align:center;color:#b5b79f;font:12px Inter,system-ui,sans-serif;margin:14px 0}.concept-note{color:#6e796c;font-size:10px}.concept-ready{animation:concept-pulse 1.5s ease-in-out infinite}@keyframes concept-pulse{50%{filter:brightness(1.55);box-shadow:0 0 24px #d5b05960}}.concept-enter{animation:concept-enter .55s ease-out}@keyframes concept-enter{from{opacity:0;filter:blur(6px);transform:scale(.97)}to{opacity:1;filter:none;transform:none}}
+.concept-manual{position:absolute;right:10px;bottom:8px;z-index:20;background:#111c16;color:#d3bd83;border:1px solid #655737;border-radius:4px;padding:5px 8px;font-size:9px;cursor:pointer}
+#concept-dialog{background:#101813;color:#e4d8b2;border:1px solid #ae9153;border-radius:8px;padding:25px;max-width:90vw}#concept-dialog::backdrop{background:#000b}#concept-dialog button{padding:8px 20px;cursor:pointer}
+@media(max-width:760px){body.layout-basic .jackpot-hero{grid-template-columns:1fr!important;grid-template-areas:"draw" "flip"!important;gap:20px}.concept-thermo{display:none}body.layout-basic #app-workspace{max-width:560px}.concept-tools{gap:8px}.concept-tools label{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.concept-ready,.concept-enter{animation:none}}
+/* The existing desktop rail is a first-class row in the height budget. */
+body.layout-basic .info-rail{display:none}
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page]{--info-panel-height:116px;--info-nav-height:28px;--info-rail-height:148px;--desktop-width:min(1192px,100vw);--desktop-gutter:16px;display:grid!important;grid-template-rows:auto minmax(0,1fr) var(--info-rail-height);height:100dvh;min-height:0;padding:0 18px!important;overflow:hidden!important}
+  #concept-stage{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+  body.layout-basic #app-workspace{width:var(--concept-main-width,900px);max-width:100%;margin:10px auto!important}
+  body.layout-basic #app-workspace .jackpot-hero{margin:10px 0 0}
+  #concept-status{margin:7px 0 0;font-size:10px}
+  .concept-note{margin:5px 0 0;font-size:9px}
+  body.layout-basic[data-desktop-page] .info-rail{position:relative;inset:auto;align-self:end;height:var(--info-rail-height);width:min(1160px,100%);margin:0 auto;display:grid}
+  .info-rail__track>#concept-bounties-mount{display:contents}
+}
+/* Shallow-banner compositions: same footprint, new arrangement of existing vector art. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > gold-rush-headline{
+    --desktop-headline-height:clamp(80px,12dvh,140px);
+    --banner-left:url('banner-chips-left.svg');--banner-right:url('banner-chips-right.svg');
+    width:100%;height:var(--desktop-headline-height);aspect-ratio:auto;margin:0;
+    container-type:size;clip-path:none;overflow:hidden;border:1px solid #9b824e;border-radius:7px;
+    background:radial-gradient(ellipse at 50% 110%,#58472a55,transparent 65%),linear-gradient(180deg,#1e2118,#090d09 48%,#151a10);
+    box-shadow:inset 0 0 0 3px #0c100b,inset 0 0 0 4px #c6ad5620;
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="seals"]{
+    --banner-left:url('banner-seals-left.svg');--banner-right:url('banner-seals-right.svg');
+    background:radial-gradient(ellipse at 50% 100%,#26524340,transparent 75%),#090f0d;
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr::before{display:none}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__inner::before,
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__inner::after{
+    display:block;top:0;bottom:0;width:27%;background-size:contain;background-repeat:no-repeat;background-position:center;
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__inner::before{background-image:var(--banner-left)}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__inner::after{background-image:var(--banner-right)}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__label{top:12%;}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__label-text{font-size:clamp(8px,9cqh,12px);letter-spacing:.2em;color:#d5c08d}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__amount-row{top:31%;gap:7px;margin-left:8px;align-items:baseline}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__amount{font-size:min(45cqh,5.8cqw);letter-spacing:-.045em;color:#ffe5a0}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__unit-code{font-size:10cqh;width:auto;margin:0;color:#baa678}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__brand{top:auto;bottom:10%}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr .gr__brand-copy{font-size:clamp(7px,8cqh,10px);letter-spacing:.15em}
+  .concept-note{display:none}
+}
+/* Original hallway artwork, with each intact stack repositioned for shallow wings. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"]{
+    --banner-left:url('banner-original-left.svg');--banner-right:url('banner-original-right.svg');
+    background:#030303;border:0;border-radius:0;box-shadow:none;
+    clip-path:polygon(var(--gr-corner) var(--gr-edge),calc(100% - var(--gr-corner)) var(--gr-edge),calc(100% - var(--gr-edge)) var(--gr-corner),calc(100% - var(--gr-edge)) calc(100% - var(--gr-corner)),calc(100% - var(--gr-corner)) calc(100% - var(--gr-edge)),var(--gr-corner) calc(100% - var(--gr-edge)),var(--gr-edge) calc(100% - var(--gr-corner)),var(--gr-edge) var(--gr-corner));
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"]::before{
+    display:block;inset:0;transform:none;opacity:1;background:none;border:1px solid #c9a645;box-shadow:none;
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::before,
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::after{width:min(30%,calc(var(--gr-height) * 2.5));background-size:100% 100%}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__amount-row{top:13%;align-items:flex-end}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__amount{font-size:min(53cqh,6.6cqw);color:#f4cf61}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__unit-code{margin-bottom:3px;color:#e9cc77}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand{top:66%;bottom:auto}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand-copy{font-size:clamp(8px,10cqh,13px)}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__label{top:83%}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__label-text{font-size:clamp(7px,7.5cqh,10px);color:#d8b44d}
+}
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"]::before{display:none}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"]::after{opacity:1;transform:none;background:url('banner-original-frame.svg') center / 100% 100% no-repeat}
+}
+/* Larger counter, flanking labels, and four physically separated stacks on each side. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::before,
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::after{width:19%;background-size:contain}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__amount-row{top:50%;transform:translate(-50%,-50%);gap:5px;margin-left:8px}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__amount{font-size:min(102cqh,10.5cqw);line-height:.86;letter-spacing:-.055em}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__unit-code{font-size:10cqh;margin-bottom:5px}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand{top:50%;left:19%;width:9%;bottom:auto;transform:translateY(-50%)}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand-copy{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:clamp(9px,10.5cqh,13px);letter-spacing:.08em}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__label{top:50%;left:auto;right:19%;width:9%;transform:translateY(-50%);line-height:1.55}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__label-text{display:block;max-width:100%;margin:auto;white-space:normal;font-size:clamp(9px,10.5cqh,13px);letter-spacing:.12em}
+}
+/* Board-integrated score readout. Kept outside both board faces during transitions. */
+.concept-tools input{width:55px;padding:6px 3px 6px 6px;background:#191e19;color:#dedccd;border:1px solid #4a4d3e;border-radius:4px;font:inherit}
+body.layout-basic .jackpot-hero__machine .concept-degen-score{
+  position:absolute;z-index:9;left:3.2%;top:46%;transform:translateY(-50%);width:12.4%;
+  display:grid;gap:7px;justify-items:center;padding:0;
+  border:0;background:none;box-shadow:none;
+  pointer-events:none;
+}
+.concept-degen-window{position:relative;box-sizing:border-box;width:100%;padding:4px 5px;background:linear-gradient(180deg,#090909,#020202);border:1px solid #8d865a66;border-radius:3px;box-shadow:inset 0 1px 0 #d5d7ad12,0 1px 2px #0005}
+.concept-degen-label{position:relative}
+.concept-degen-digits{display:block;width:100%;height:auto;overflow:visible}
+.concept-degen-digits polygon{fill:#263026;opacity:.16}
+.concept-degen-digits polygon.is-lit{fill:var(--concept-score-color,#4ade80);opacity:1;filter:drop-shadow(0 0 1.2px var(--concept-score-glow,#4ade8085))}
+.concept-degen-label{font:750 clamp(6px,1.7cqi,9px)/1 Inter,system-ui,sans-serif;letter-spacing:.14em;color:#b7bea9;padding-left:.14em}
+
+/* Original endcaps keep their own aspect ratio and run the full header height. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"]{
+    background:url('banner-corner-left.svg') left center / auto 100% no-repeat,
+      url('banner-corner-right.svg') right center / auto 100% no-repeat,#030303;
+    --banner-left:url('banner-stacks-left.svg');--banner-right:url('banner-stacks-right.svg');
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::before,
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::after{
+    width:calc(19% - var(--gr-height) * .67);background-size:contain;
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::before{left:calc(var(--gr-height) * .66)}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::after{right:calc(var(--gr-height) * .66)}
+}
+
+/* Clear the component gutters in the copper itself; preserve the board texture. */
+body.layout-basic .jackpot-hero__machine {
+  background:var(--site-cabinet-surface);
+  --site-cabinet-surface:
+    radial-gradient(62% 18% at 50% 2%, rgba(205, 164, 72, 0.055), transparent 72%),
+    radial-gradient(48% 72% at 50% 47%, rgba(33, 112, 72, 0.045), transparent 76%),
+    radial-gradient(118% 58% at 50% -6%, rgba(255, 226, 163, 0.05), transparent 62%),
+    radial-gradient(128% 118% at 50% 46%, transparent 54%, rgba(0, 0, 0, 0.52) 100%),
+    url('cabinet-silkscreen.svg') center / 100% 100% no-repeat,
+    url('cabinet-routing.svg') center / 100% 100% no-repeat,
+    repeating-linear-gradient(45deg, rgba(216, 232, 220, 0.013) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.17) 0 1px, transparent 1px 5px),
+    url('/app/assets/jackpot/daily-drawing-backplate-v9.webp') center / 100% 100% no-repeat,
+    #03100b;
+}
+body.layout-basic .jackpot-hero__machine .ldj-foil-machine-bank{background-image:url('cabinet-foil-routing.svg')}
+
+/* Original deep-aisle chip groups fit by uniform scaling; endcaps sit in front. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::before,
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::after{width:calc(19% - var(--gr-height) * .52)}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::before{left:calc(var(--gr-height) * .5);background-position:left center}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__inner::after{right:calc(var(--gr-height) * .5);background-position:right center}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"]::before{
+    display:block;inset:0;z-index:2;border:0;pointer-events:none;
+    background:url('banner-corner-left.svg') left center / auto 100% no-repeat,url('banner-corner-right.svg') right center / auto 100% no-repeat;
+  }
+}
+
+/* Echo the brand colors on the opposite side of the jackpot amount. */
+.gr__label-text .concept-golden{color:#d82f3d}
+.gr__label-text .concept-ticket{color:#d8b44d}
+.gr__label-text .concept-jackpot{color:#e4e4df}
+
+/* Match the red and white captions across a shared three-row rhythm. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand-copy,
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__label-text{
+    display:grid;grid-template-rows:repeat(3,1.55em);gap:0;align-items:center;justify-items:center;line-height:1.55;
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand-copy strong{grid-row:1}
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand-copy small{grid-row:3}
+}
+
+/* Center captions in the visible gaps, including the contained artwork's width. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__brand{
+    left:var(--caption-left-center,23.5%);transform:translate(-50%,-50%);
+  }
+  body.layout-basic[data-desktop-page] #app-workspace > .gr[data-banner-style="original"] .gr__label{
+    left:var(--caption-right-center,76.5%);right:auto;transform:translate(-50%,-50%);
+  }
+}
+
+/* Same loot-tier palette as the quest panel; score thresholds use its shared helper. */
+.concept-degen-score[data-score-tier="white"]{--concept-score-color:#f8fafc;--concept-score-glow:#f8fafc85}
+.concept-degen-score[data-score-tier="green"]{--concept-score-color:#4ade80;--concept-score-glow:#4ade8085}
+.concept-degen-score[data-score-tier="purple"]{--concept-score-color:#c084fc;--concept-score-glow:#c084fc85}
+.concept-degen-score[data-score-tier="orange"]{--concept-score-color:#f5a623;--concept-score-glow:#f5a62385}
+.concept-degen-score[data-score-tier="gold"]{--concept-score-color:#fde047;--concept-score-glow:#fde04785}
+
+/* Fit the unchanged inventory ticket design within the purchase quadrant. */
+body.layout-basic .jackpot-hero__machine .dgx-ticket-art > .ticket-card{
+  box-sizing:border-box;width:min(100cqw,100cqh);height:min(100cqw,100cqh);
+}
+body.layout-basic .jackpot-hero__machine .dgx-ticket-art .trait-quadrant img{max-width:none;max-height:none;filter:none}
+body.layout-basic .jackpot-hero__machine .dgx-ticket-art .ticket-card-center img{filter:none}

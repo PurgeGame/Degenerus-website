@@ -1,0 +1,592 @@
+@import url('native-layout.css') screen and (min-width:1100px);
+@import url('number-fonts.css');
+
+/* The original referral banner and registration owner remain live. */
+body.layout-basic .site-referral-strip .site-referral-custom{box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 70px;gap:5px 7px;padding:7px 9px;border:1px solid #96704955;border-radius:8px;background:#1c1723;min-width:0}
+body.layout-basic .site-referral-strip .site-referral-custom .deg-referral-dialog__custom-head{grid-column:1 / -1;display:flex;gap:8px;justify-content:space-between;min-width:0}
+body.layout-basic .site-referral-strip .site-referral-custom .deg-referral-dialog__custom-head strong{font-size:10px;white-space:nowrap}
+body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-referral-current-code"]{font-size:8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:120px}
+body.layout-basic .site-referral-strip .site-referral-custom>label{display:grid;gap:3px;min-width:0;margin:0}
+body.layout-basic .site-referral-strip .site-referral-custom>label>span:first-child{font-size:8px;letter-spacing:.06em;color:#b9a9ca}
+body.layout-basic .site-referral-strip .site-referral-custom input{box-sizing:border-box;width:100%;min-width:0;height:27px;min-height:27px!important;padding:3px 6px!important;border:1px solid #6c547b88!important;border-radius:4px;background:#100e17!important;color:#f3e3bb;font-size:11px!important}
+body.layout-basic .site-referral-strip .site-referral-custom .deg-referral-dialog__pct-field{display:block}
+body.layout-basic .site-referral-strip .site-referral-custom .deg-referral-dialog__pct-field>span{display:none}
+body.layout-basic .site-referral-strip .site-referral-custom .site-kickback[hidden]{display:none!important}
+body.layout-basic .site-referral-strip .site-referral-custom:not(:has(.site-kickback:not([hidden])))>label:not(.site-kickback){grid-column:1 / -1}
+body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-referral-register"]{grid-column:1 / -1;min-height:23px;height:23px;padding:3px 8px;font-size:9px;margin:0}
+body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-referral-dialog-feedback"]{grid-column:1 / -1;font-size:9px;margin:0;line-height:1.2}
+.site-collect{display:flex;flex-direction:column;justify-content:center;gap:4px}
+.site-collect-caption{font:600 9px/1 Inter,sans-serif;color:#a99bb5}
+.site-collect-credit{height:27px;min-height:27px;border:1px solid #8e754f88;border-radius:5px;background:linear-gradient(#392e22,#241f1c);color:#edd19a;padding:4px 8px;font:750 10px/1.1 Inter,sans-serif;cursor:pointer}
+.site-collect-credit:disabled{opacity:.45;cursor:default}
+.site-collect-credit:focus-visible{outline:2px solid #edc77e;outline-offset:2px}
+.site-settings-label{display:none}
+.site-referrals-inline{display:block;min-width:0}
+.site-referrals-inline .aff-summary{display:none!important}
+.site-referrals-inline .aff-share,.site-referrals-inline .aff-referees-section{display:none}
+.site-discord-mark{width:20px;height:20px;object-fit:contain}
+.unified-nav .site-discord-mark{filter:brightness(0) invert(1)}
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] .info-rail{grid-template-columns:minmax(0,1fr)}
+  /* The main cabinet delegates to this native mining owner; only its rail UI retires. */
+  body.layout-basic[data-desktop-page] .info-rail__mining{display:none!important}
+  body.layout-basic[data-hub-layout="wide"] .jackpot-hero{
+    grid-template-columns:minmax(0,1.5fr) 62px minmax(0,1fr)!important;
+  }
+  body.layout-basic[data-desktop-page][data-hub-layout="wide"] #app-workspace>:is(gold-rush-headline,app-protocol-wallet-banner){
+    width:min(100%,var(--hub-width,1160px));
+  }
+  @media(max-height:820px){
+    body.layout-basic[data-hub-layout="wide"] .jackpot-hero{
+      grid-template-columns:minmax(0,1.22fr) 62px minmax(0,1fr)!important;
+    }
+    body.layout-basic[data-hub-layout="wide"] .jackpot-hero .df-bet-oval{height:64px}
+    body.layout-basic[data-hub-layout="wide"] .jackpot-hero .df-bet-oval .df-bet-chip-rack{--df-chip-stack-height:1.35rem}
+  }
+  body.site-bottom-utilities .unified-nav,
+  body.site-bottom-utilities #nav-slot{display:none!important}
+  body.layout-basic.site-bottom-utilities .info-rail__nav{gap:4px;padding-inline:6px;align-items:center}
+  body.layout-basic .info-rail__nav>#unav-discord-app{margin-right:auto}
+  body.layout-basic .info-rail__nav>.nav-settings{margin-left:auto;position:static}
+  body.layout-basic .info-rail__nav>.nav-btn,
+  body.layout-basic .info-rail__nav .nav-settings__trigger{
+    display:flex!important;align-items:center;justify-content:center;gap:5px;
+    width:28px;min-width:28px;height:24px;min-height:24px;padding:0;
+    font:700 10px/1.1 Inter,sans-serif;border-radius:4px;white-space:nowrap;
+    color:#dec387;flex-shrink:0;
+  }
+  body.layout-basic .info-rail__nav>.nav-btn{border:0;background:transparent;box-shadow:none}
+  body.layout-basic .info-rail__nav .nav-settings__trigger,
+  body.layout-basic .info-rail__nav .nav-settings__trigger:hover,
+  body.layout-basic .info-rail__nav .nav-settings.is-open .nav-settings__trigger{
+    border:0;background:transparent;box-shadow:none;
+  }
+  body.layout-basic .info-rail__nav>#unav-wallet-app.connected{
+    color:#77ed9a;background:#1b633c44;box-shadow:inset 0 0 0 1px #58d18755;
+  }
+  body.layout-basic .info-rail__nav .site-discord-mark{width:19px;height:19px}
+  body.layout-basic .info-rail__nav>.nav-btn .btn-label{
+    position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip-path:inset(50%);white-space:nowrap;
+  }
+  body.layout-basic .info-rail__nav .nav-btn svg{width:13px;height:13px;flex:none}
+  body.layout-basic .info-rail__nav .nav-settings__panel{
+    top:auto;bottom:calc(100% + 8px);right:0;max-height:calc(100dvh - 180px);width:340px;
+  }
+  body.layout-basic .info-rail__nav [data-panel-open="history"]{
+    grid-column:1 / -1;width:100%;justify-content:center;min-height:34px;
+  }
+  body.layout-basic.site-bottom-utilities .info-rail__tabs{overflow-x:auto;scrollbar-width:none}
+  body.layout-basic .info-rail .site-referrals-inline{display:none}
+  body.layout-basic[data-desktop-info="referrals"] .info-rail .site-referral-strip{
+    display:grid!important;grid-template-columns:minmax(0,1fr) 220px;gap:10px;max-width:none!important;width:100%;height:100%;
+  }
+  body.layout-basic .info-rail .site-referral-strip>.site-referral-shell{
+    display:block;height:100%;padding:0!important;border:0!important;background:none!important;box-shadow:none!important;overflow:visible;grid-template-rows:1fr!important;align-items:stretch;
+  }
+  body.layout-basic .info-rail .site-referral-shell::before,
+  body.layout-basic .info-rail .site-referral-shell::after{display:none!important}
+  body.layout-basic .info-rail .site-referral-shell>.site-referral-custom{display:none}
+  body.layout-basic[data-desktop-info="referrals"] .info-rail .site-referral-strip>.site-referral-shell{
+    display:grid;grid-template-columns:minmax(270px,1.05fr) minmax(250px,1fr);gap:10px;
+  }
+  body.layout-basic[data-desktop-info="referrals"] .info-rail .site-referral-shell>.site-referral-custom{display:grid}
+  body.layout-basic .info-rail .site-referral-banner{
+    height:100%;cursor:pointer;box-sizing:border-box;container-type:inline-size!important;
+    --ad-stub:64px;grid-template-columns:48px minmax(0,1fr) var(--ad-stub)!important;
+    column-gap:10px!important;padding-left:10px!important;
+  }
+  body.layout-basic .info-rail .site-referral-banner .deg-referral-card__coin{width:48px!important;height:48px!important}
+  body.layout-basic .info-rail .site-referral-banner .deg-referral-card__heading h2{font-size:clamp(14px,5.2cqi,24px)!important;letter-spacing:.02em}
+  body.layout-basic .info-rail .site-referral-banner .deg-referral-card__copy strong{
+    display:grid!important;grid-template-columns:auto 1fr;gap:2px 5px!important;
+    font-size:clamp(16px,6.5cqi,28px);white-space:normal;
+  }
+  body.layout-basic .info-rail .site-referral-banner .deg-referral-card__copy strong>span{font-size:inherit!important}
+  body.layout-basic .info-rail .site-referral-banner .deg-referral-card__copy .deg-referral-card__earn{font-size:12px!important;align-self:center}
+  body.layout-basic .info-rail .site-referral-banner .deg-referral-card__copy .deg-referral-card__forever{grid-column:1 / -1;font-size:inherit!important}
+  body.layout-basic .site-referral-strip .site-referral-custom .deg-referral-dialog__custom-head strong{font-size:12px}
+  body.layout-basic .site-referral-strip .site-referral-custom .deg-referral-dialog__custom-head,
+  body.layout-basic .site-referral-strip .site-referral-custom>label>span:first-child{line-height:1.15}
+  body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-referral-current-code"]{font-size:9px}
+  body.layout-basic .site-referral-strip .site-referral-custom>label>span:first-child{font-size:9px}
+  body.layout-basic .site-referral-strip .site-referral-custom input{font-size:13px!important}
+  body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-referral-register"]{font-size:11px;height:26px;min-height:26px}
+  body.layout-basic[data-desktop-info="referrals"] .info-rail .site-referrals-inline{display:block;height:100%}
+  body.layout-basic .site-referrals-inline .aff-disclosure{height:100%;margin:0;border:0;background:none;box-shadow:none}
+  body.layout-basic .site-referrals-inline .aff-content{
+    display:grid;grid-template-columns:1fr;grid-template-rows:28px 23px 1fr;
+    gap:2px;height:108px;box-sizing:border-box;padding:3px 0;border:0;
+  }
+  body.layout-basic .site-referrals-inline .aff-content>*{min-width:0;min-height:0;margin:0}
+  body.layout-basic .site-referrals-inline .aff-share,
+  body.layout-basic .site-referrals-inline .aff-referees-section{display:none}
+  body.layout-basic .site-referrals-inline .aff-network-stats{display:flex;gap:10px;align-items:center}
+  body.layout-basic .site-referrals-inline .aff-network-stat{display:flex;align-items:baseline;min-height:0;padding:0;gap:4px;border:0;background:none}
+  body.layout-basic .site-referrals-inline .aff-network-stat span{font-size:10px;letter-spacing:0}
+  body.layout-basic .site-referrals-inline .aff-network-stat strong{font-size:16px}
+  body.layout-basic .site-referrals-inline .aff-network-section{display:flex;gap:5px;padding:0;border:0;background:none}
+  body.layout-basic .site-referrals-inline .aff-referred-by{justify-self:start;text-align:left;font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  body.layout-basic .site-referrals-inline .aff-network-label{font-size:9px;white-space:nowrap}
+  body.layout-basic .site-referrals-inline .aff-referral-person{font-size:10px}
+  body.layout-basic .site-referrals-inline .aff-referral-avatar{display:none}
+  body.layout-basic .site-referral-custom{align-content:center}
+  body.layout-basic .site-collect-caption{font-size:10px}
+  body.layout-basic .site-collect-credit{font-size:11px;height:29px;min-height:29px}
+
+}
+@media(max-width:1099px){
+  body.layout-basic .site-referral-strip{height:auto!important;display:block!important}
+  body.layout-basic .site-referral-strip>.deg-referral-card{margin-bottom:8px}
+  body.layout-basic .site-referral-strip>.site-referral-shell{
+    display:grid!important;grid-template-columns:1fr!important;grid-template-rows:auto!important;
+    gap:8px;height:auto!important;padding:0!important;border:0!important;background:none!important;box-shadow:none!important;
+  }
+  body.layout-basic .site-referral-shell::before,
+  body.layout-basic .site-referral-shell::after{display:none!important}
+  body.layout-basic .site-referral-banner{min-height:85px!important;height:85px!important}
+  body.site-mobile-connect [data-mpager-pending]{display:none!important}
+  body.layout-basic .mpager-tabs>#unav-wallet-app{
+    display:flex!important;flex-direction:column;justify-content:center;align-items:center;
+    gap:4px;min-width:0;width:100%;height:47px;margin:0;padding:4px 1px;
+    border:1px solid #bd904b77;border-radius:9px;background:#b8790a22;color:#ffd479;
+    font:800 9px/1 Inter,sans-serif;text-transform:uppercase;
+  }
+  body.layout-basic .mpager-tabs>#unav-wallet-app .btn-label{display:block!important;font:inherit}
+  body.layout-basic .mpager-tabs>#unav-wallet-app svg{width:20px;height:20px}
+}
+
+#site-buy-board,.concept-degen-score,.concept-thermo,.site-buy-in{display:none}
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page]{
+    --desktop-width:min(calc(100vw - 120px),var(--hub-width,1160px));
+    display:flex!important;padding:0!important;
+  }
+  body.layout-basic[data-desktop-page] > .container{max-width:var(--desktop-width)}
+  body.layout-basic[data-desktop-page] #app-workspace{
+    display:grid!important;width:100%!important;max-width:none;
+    margin:0 0 var(--info-rail-height)!important;padding:.4rem 0 .5rem!important;
+    transform:none!important;
+  }
+  body.layout-basic[data-desktop-page] .info-rail{
+    position:fixed;inset:auto auto 0 50%;transform:translateX(-50%);
+    width:min(calc(var(--desktop-width) - 32px),var(--hub-width,1160px));max-width:none;margin:0;display:grid;container-type:inline-size;container-name:hub-rail;
+  }
+  body.layout-basic #app-workspace > app-pool-progress,
+  body.layout-basic .jackpot-hero > app-decimator-panel{display:none!important}
+  body.layout-basic #app-workspace .jackpot-hero{margin:4px 0 0}
+  body.layout-basic .jackpot-hero__draw{display:block!important}
+  body.layout-basic .jackpot-hero__machine{isolation:isolate}
+  body.layout-basic .jackpot-hero__machine replay-panel[hidden]{display:none!important}
+  body.layout-basic .jackpot-hero__machine #site-buy-board{display:block}
+  body.layout-basic .jackpot-hero__machine[data-hub-face="buy"] #site-draw-board{display:none!important}
+  body.layout-basic .jackpot-hero__machine[data-hub-face="draw"] #site-buy-board{display:none!important}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .concept-key-idle{visibility:hidden;pointer-events:none}
+  /* Keep the summary implementation available, but omit its CTA from this desktop concept. */
+  body.layout-basic .jackpot-hero .ldj-results-cta,
+  body.layout-basic .jackpot-hero__summary-slot{display:none!important}
+  body.layout-basic .jackpot-hero__machine .concept-degen-score{display:grid}
+  .concept-thermo{display:flex}
+  .concept-track{min-height:100px}
+  .concept-track>div{height:var(--site-pool-fill,0%)}
+  .site-buy-in{display:block;position:absolute;right:10px;bottom:8px;z-index:20;background:#111c16;color:#d3bd83;border:1px solid #655737;border-radius:4px;padding:5px 8px;font-size:9px;cursor:pointer}
+  .site-buy-in[hidden]{display:none}
+  body.layout-basic .jackpot-hero__draw:has([data-hub-face="buy"]) > .jackpot-day-history,
+  body.layout-basic .jackpot-hero__draw:has([data-hub-face="buy"]) > .jackpot-hero__summary-slot{display:none!important}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-ticket-center{pointer-events:auto;cursor:default}
+  body.layout-basic .jackpot-hero__machine .concept-game:focus-visible{outline:2px solid #e0c282;outline-offset:-3px}
+  .concept-pool-amount>span{font-size:10px}
+}
+@media(min-width:1100px){
+  /* Keep the real navigation and information rail readable while the game row fits vertically. */
+  body.layout-basic[data-desktop-page]{--desktop-width:min(calc(100vw - 120px),1160px)}
+  body.layout-basic[data-desktop-page] #app-workspace > :is(gold-rush-headline,.jackpot-hero,app-protocol-wallet-banner){
+    width:min(100%,var(--hub-width,1160px));justify-self:center;
+  }
+  body.layout-basic app-protocol-wallet-banner{padding:.25rem .6rem;margin:0}
+  body.layout-basic .protocol-wallet-banner__mark{width:1.6rem;height:1.6rem}
+  body.layout-basic .protocol-wallet-banner__connect{min-height:1.6rem}
+}
+@media(min-width:1100px){
+  body.layout-basic .jackpot-hero > app-daily-flip{container:hub-flip / inline-size}
+  body.layout-basic .jackpot-hero .df-coin-zone{min-height:clamp(110px,32cqi,170px);padding:.35rem 0}
+  body.layout-basic .jackpot-hero .df-coin{width:clamp(96px,29cqi,150px);height:clamp(96px,29cqi,150px)}
+  body.layout-basic .jackpot-hero .df-once-daily{width:clamp(122px,38cqi,198px)}
+  body.layout-basic .jackpot-hero .df-coin-stage::after{width:calc(clamp(96px,29cqi,150px) + 1rem)}
+}
+@media(min-width:1100px){
+  .concept-track>div{height:clamp(0px,calc(var(--site-pool-fill,0%) - 4px),calc(100% - 4px))}
+  .concept-track[data-scale="expanded"]::after{display:none}
+  .site-pool-marker{position:absolute;left:50%;z-index:5;width:34px;height:2px;transform:translateX(-50%);background:#e1c382;box-shadow:0 0 0 1px #111b11;cursor:help}
+  .site-pool-marker[hidden]{display:none}
+  .site-pool-marker--growth{width:40px;background:#8fbfda;box-shadow:0 0 5px #69b7e77a}
+  .site-pool-marker__label{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);display:grid;gap:1px;min-width:40px;padding:3px 4px;border:1px solid #6092ae80;border-radius:3px;background:#0b171df2;color:#b8e4ff;line-height:1.1;white-space:nowrap;box-shadow:0 2px 5px #0008}
+  .site-pool-marker__label small{font-size:7px;letter-spacing:.08em}
+  .site-pool-marker__label strong{font:700 9px/1.1 Inter,system-ui,sans-serif}
+  .is-over-growth .site-pool-marker--growth{background:#a5d3aa;box-shadow:0 0 5px #74b77a66}
+  .is-over-growth .site-pool-marker__label{color:#b7e9bb;border-color:#61986b;background:#101d12f2}
+  .site-pool-history{position:absolute;inset:0;pointer-events:none}
+  .site-pool-history__tick{position:absolute;left:-6px;width:7px;height:1px;background:#b1a77c;pointer-events:auto;cursor:help}
+  .site-pool-marker:focus-visible,.site-pool-history__tick:focus-visible{outline:2px solid #fff;outline-offset:3px}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn{font-size:clamp(8px,2.5cqi,13px);letter-spacing:.04em;text-transform:none}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn::before{display:none}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn:disabled{color:#c4c8c0;opacity:1}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn.site-mine-ready{
+    color:#e0ffd6;border-color:#91cd70;background:linear-gradient(180deg,#263d1d,#13200f);
+    box-shadow:inset 0 0 14px #9edb4e22,0 0 16px #a9d75b66;text-shadow:0 0 8px #b0ef7980;
+    animation:site-mine-glow 1.6s ease-in-out infinite;
+  }
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn.site-buy-ready{
+    color:#fff0bc;border-color:#d4b05d;background:linear-gradient(180deg,#44371b,#241c0b);
+    box-shadow:inset 0 0 10px #e7b84b18,0 0 7px #d5a34030;text-shadow:0 0 3px #ffd16b38;
+    animation:none;
+  }
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn.site-buy-ready::before,
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn.site-buy-ready::after{
+    display:none;animation:none;
+  }
+  @keyframes site-mine-glow{50%{box-shadow:inset 0 0 18px #9edb4e38,0 0 22px #a9d75b99}}
+}
+@media(prefers-reduced-motion:reduce){
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-reveal-btn.site-mine-ready{animation:none}
+}
+.site-palette-tools{display:none}
+@media(min-width:1100px){
+  .site-palette-tools{display:block;position:fixed;top:4px;right:12px;z-index:1101;font:10px/1.4 Inter,system-ui,sans-serif;color:#f1d8aa}
+  .site-palette-tools summary{cursor:pointer;padding:2px 7px;border:1px solid #b7925466;border-radius:4px;background:#18140eee}
+  .site-palette-tools__panel{position:absolute;right:0;top:calc(100% + 5px);display:grid;gap:12px;width:170px;padding:12px;background:#121611;border:1px solid #77613c;border-radius:5px;box-shadow:0 8px 20px #0008}
+  .site-palette-tools label{display:grid;gap:7px}
+  .site-palette-tools select{font:inherit;color:#e7ddc9;background:#24281f;border:1px solid #6a6d59;border-radius:3px;padding:6px}
+  .jackpot-hero__machine[data-buy-palette="charcoal"]{--buy-base:#111215;--buy-light:#41444a;--buy-shade:#08090b}
+  .jackpot-hero__machine[data-buy-palette="navy"]{--buy-base:#0a1424;--buy-light:#294767;--buy-shade:#050b15}
+  .jackpot-hero__machine[data-buy-palette="burgundy"]{--buy-base:#230c11;--buy-light:#652c36;--buy-shade:#100507}
+  .jackpot-hero__machine[data-buy-palette="plum"]{--buy-base:#1b1025;--buy-light:#51345f;--buy-shade:#0b0711}
+  .jackpot-hero__machine[data-buy-palette="products"]{--buy-base:#151413;--buy-light:#40352c;--buy-shade:#0b0908}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette]:not([data-buy-palette="original"]) #site-buy-board :is(.dgx-module,.concept-game){
+    background:radial-gradient(ellipse at 50% 35%,var(--buy-light),transparent 90%),linear-gradient(180deg,var(--buy-base),var(--buy-shade));
+  }
+  body.layout-basic .jackpot-hero__machine[data-buy-palette]:not([data-buy-palette="original"]) #site-buy-board .concept-games{background:var(--buy-base)}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="products"] #site-buy-board .dgx-module--tickets{--buy-base:#10223b;--buy-light:#31567e;--buy-shade:#07101e}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="products"] #site-buy-board .dgx-module--passes{--buy-base:#0a211f;--buy-light:#245c57;--buy-shade:#04110f}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="products"] #site-buy-board .dgx-module--luckboxes{--buy-base:#21102c;--buy-light:#58356b;--buy-shade:#0f0716}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="products"] #site-buy-board .dgx-module--degenesis{--buy-base:#2c0d16;--buy-light:#733344;--buy-shade:#13060b}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette]:not([data-buy-palette="original"]) #site-buy-board :is(.dgx-module,.concept-game):hover{box-shadow:inset 0 0 22px #ffffff13}
+}
+@media(min-width:1100px){
+  #site-buy-board .concept-games{grid-template-rows:48% 52%}
+  #site-buy-board .concept-game{padding:4% 6%;cursor:default}
+  #site-buy-board .site-degenerette-cell{padding:18% 8% 4%}
+  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .concept-games{grid-template-rows:52% 48%}
+  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .site-degenerette-cell{padding:3% 3% 2%}
+  #site-buy-board .site-game-art{display:block;width:100%;height:100%;min-height:0;padding:0;border:0;background:none;cursor:pointer}
+  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .site-degenerette-cell .site-game-art{position:relative;overflow:hidden}
+  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .site-degenerette-cell img{position:static;width:100%;height:100%;object-fit:contain;transform:none}
+  #site-buy-board .site-game-art:focus-visible,#site-buy-board .site-craps-buy:focus-visible{outline:2px solid #e0c282;outline-offset:2px}
+  #site-buy-board .site-craps-cell{grid-template-rows:minmax(0,1fr) auto auto;gap:3px;padding:3% 6% 4%}
+  #site-buy-board .site-craps-countdown{color:#f1fff6;text-shadow:0 1px 2px #001d12;font:600 clamp(8px,1.8cqi,11px)/1.2 Inter,system-ui,sans-serif;white-space:nowrap}
+  #site-buy-board .site-craps-buy{width:100%;min-height:22px;padding:3px 4px;border:1px solid rgba(253,224,71,.72);border-radius:4px;background:linear-gradient(180deg,#f5c842,#b8790a);color:#241600;box-shadow:inset 0 1px rgba(255,255,255,.28),0 1px 2px #0004;font:800 clamp(9px,2cqi,12px)/1.2 Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+  #site-buy-board .site-craps-buy:disabled{opacity:.55;cursor:default}
+  #site-buy-board .site-craps-buy:not(:disabled):hover{filter:brightness(1.1);box-shadow:inset 0 1px #ffffff60,0 0 6px #f5c84244}
+  body.layout-basic .jackpot-hero__machine:not([data-buy-palette="original"]) #site-buy-board .site-craps-cell{--buy-base:#073b25;--buy-light:#187849;--buy-shade:#032517}
+  body.layout-basic .jackpot-hero__machine:not([data-buy-palette="original"]) #site-buy-board .site-degenerette-cell{--buy-base:#4a101a;--buy-light:#8a2535;--buy-shade:#260710}
+}
+@media(min-width:1100px) and (prefers-reduced-motion:no-preference){
+  #site-buy-board .replay-ticket.site-board-leaving{animation:site-board-leave .24s ease-in forwards;pointer-events:none}
+  @keyframes site-board-leave{to{opacity:0;filter:blur(3px);transform:scale(.985)}}
+}
+@media(min-width:1100px){
+  .concept-thermo{gap:16px}
+  .site-pool-day{font:700 8px/1.2 Inter,system-ui,sans-serif;letter-spacing:.35px;color:#cabd99;white-space:nowrap;margin-top:3px}
+  .concept-pool-amount{gap:2px}
+  .concept-pool-amount>strong{font-size:18px;color:#eee1b6}
+  .concept-pool-amount>span{font:600 8px/1.2 Inter,system-ui,sans-serif;letter-spacing:1px;color:#aca58f}
+}
+
+@media(min-width:1100px){
+  .site-pool-day b{color:#f47764;font-weight:800}
+  .site-pool-day-fill{position:absolute;bottom:2px;left:2px;right:2px;z-index:2;max-height:calc(100% - 4px);border-radius:8px;background:linear-gradient(90deg,#8f2927,#f18471 45%,#ae4035);box-shadow:0 0 13px #df493620,inset 0 1px #ffd4bd;pointer-events:none}
+  .site-pool-day-fill[hidden]{display:none}
+  .site-pool-day-fill::before{content:'';position:absolute;top:-1px;left:-3px;right:-3px;height:3px;background:#ffc0aa;border-radius:2px;box-shadow:0 0 7px #f1847188}
+}
+
+@media(min-width:1100px){
+  .site-pool-marker--goal .site-pool-marker__label{color:#efe0b7;border-color:#a58c5066;background:#1a180df2}
+  .site-pool-marker__label>span{white-space:nowrap;line-height:1.1}
+  .site-pool-marker__label>span small{font-size:6px;letter-spacing:0}
+}
+
+/* Bottom-row passes: aligned benefit cells and a full-width AFKing action. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers{
+    grid-template-columns:104px minmax(0,1fr) clamp(252px,29%,330px);gap:10px;
+  }
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has([data-subscription-state="unavailable"]){grid-template-columns:104px minmax(0,1fr)}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__brand{width:104px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__catalog{grid-template-rows:minmax(0,1fr) 14px;gap:4px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__purchases{gap:5px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offer{grid-template-columns:100px minmax(0,1fr)!important;gap:8px;padding:2px 7px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__product{grid-template-columns:24px minmax(0,1fr)!important;gap:3px 6px;margin:-2px 0 -2px -7px;padding:2px 6px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__product strong{font-size:11px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__product b{font-size:16px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__seal{width:24px!important;height:24px!important;font-size:10px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__perks{
+    display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:2px 8px!important;align-items:center;font-size:10px!important;line-height:1.2;
+  }
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__perks>span::before{content:none}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__bulk{grid-column:auto!important;padding:0!important;border:0!important;background:none!important;font-size:10px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__whale{grid-template-columns:minmax(0,1fr) 54px!important;padding-right:5px!important;gap:4px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity{height:26px;grid-template-columns:16px minmax(0,1fr) 16px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity :is(button,input){height:24px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__included{gap:10px;font-size:10px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking[data-subscription-state="unavailable"]{
+    grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 28px;gap:5px;padding:8px 10px;
+  }
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking[data-subscription-state="unavailable"] .pass-afking__quick{grid-column:1;grid-template-columns:1fr}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking[data-subscription-state="unavailable"] .pass-afking__quick>.pass-afking__edit{height:28px;min-height:28px;padding:4px 8px;font-size:11px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking[data-subscription-state="unavailable"] .pass-afking__current{font-size:14px;line-height:1.2;letter-spacing:-.015em;white-space:nowrap}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking[data-subscription-state="unavailable"] .pass-product-copy{gap:3px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking[data-subscription-state="unavailable"] .pass-afking__intro{font-size:10px;line-height:1.2}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]){
+    grid-template-columns:minmax(0,1fr) 116px;grid-template-rows:30px minmax(0,1fr);gap:5px 8px;padding:7px 9px;
+  }
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]) .pass-afking__head{grid-area:1 / 1 / 2 / -1;flex-direction:row;justify-content:space-between;align-items:center}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]) .pass-product-copy{gap:2px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]) .pass-afking__account{grid-area:2 / 1;gap:5px;padding:0;border:0}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]) .pass-afking__account strong{font-size:11px;white-space:nowrap}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]) .pass-afking__account small{font-size:8px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]) .pass-afking__quick{grid-area:2 / 2;gap:4px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]) .pass-afking__quick>button{min-height:24px;padding:3px;font-size:8px}
+  @media(max-width:1199px){
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers{grid-template-columns:88px minmax(0,1fr) 252px;gap:7px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has([data-subscription-state="unavailable"]){grid-template-columns:88px minmax(0,1fr)}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__brand{width:88px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offer{grid-template-columns:88px minmax(0,1fr)!important;gap:6px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__perks{font-size:9px!important;gap:2px 5px!important}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking[data-subscription-state="unavailable"] .pass-afking__current{font-size:13px}
+  }
+}
+
+/* Buy-face emblem retains the original flame and diamond silhouette. */
+@media(min-width:1100px){
+  #site-buy-board .replay-ticket-center>:not(.site-buy-diamond){display:none!important}
+  #site-buy-board .replay-ticket-center::before{background:radial-gradient(ellipse at 25% 15%,#45534380,transparent 60%),linear-gradient(145deg,#15281e,#070e0b 65%,#19261a);border:2px solid #8a8d8f;box-shadow:none}
+  #site-buy-board .site-buy-diamond{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2%;width:100%;height:100%;transform:translateY(-6%);pointer-events:none;container-type:size}
+  #site-buy-board .site-buy-diamond img{width:27%;height:34%;object-fit:contain;filter:brightness(0) saturate(100%) invert(87%) sepia(39%) saturate(579%) hue-rotate(346deg) brightness(102%) contrast(93%)}
+  #site-buy-board .site-buy-diamond strong{font:900 11.5cqw/1 Inter,system-ui,sans-serif;letter-spacing:.045em;color:#ffe9a8;white-space:nowrap;text-shadow:0 1px 2px #000}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__subscription:has([data-subscription-state="unavailable"]){display:none!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__perks{grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-template-rows:repeat(2,auto);grid-auto-flow:column;align-content:center;height:100%}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has([data-subscription-state="unavailable"]) .pass-shop__perks{font-size:clamp(10px,.85vw,13px)!important;gap:3px 14px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has([data-subscription-state="unavailable"]) .pass-shop__offer{grid-template-columns:120px minmax(0,1fr)!important;gap:12px}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has([data-subscription-state="unavailable"]) .pass-shop__product strong{font-size:12px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has([data-subscription-state="unavailable"]) .pass-shop__product b{font-size:18px!important}
+}
+
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:not(:has(>.pass-shop__subscription:not([hidden]))){grid-template-columns:104px minmax(0,1fr)}
+}
+@media(min-width:1100px) and (max-width:1199px){
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:not(:has(>.pass-shop__subscription:not([hidden]))){grid-template-columns:88px minmax(0,1fr)}
+}
+
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page="games"] #app-workspace{align-content:start}
+  body.layout-basic[data-desktop-page="games"] #app-workspace>.play-grid{height:var(--site-games-height,23rem);--desktop-game-height:var(--site-games-height,500px)}
+}
+
+/* Coordinated purchase palettes keep each game recognizable. */
+@media(min-width:1100px){
+  .jackpot-hero__machine[data-buy-palette="jewel"]{--buy-base:#141512;--buy-light:#454333;--buy-shade:#080a08}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="jewel"] #site-buy-board .dgx-module--tickets{--buy-base:#39250a;--buy-light:#956f25;--buy-shade:#1b1206}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="jewel"] #site-buy-board .dgx-module--passes{--buy-base:#102b43;--buy-light:#326b92;--buy-shade:#071725}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="jewel"] #site-buy-board .dgx-module--luckboxes{--buy-base:#311346;--buy-light:#864b9e;--buy-shade:#170920}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="jewel"] #site-buy-board .site-craps-cell{--buy-base:#06482d;--buy-light:#23945c;--buy-shade:#032819}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="jewel"] #site-buy-board .site-degenerette-cell{--buy-base:#5b0c20;--buy-light:#b42c42;--buy-shade:#2d0711}
+  .jackpot-hero__machine[data-buy-palette="smoked"]{--buy-base:#141512;--buy-light:#454333;--buy-shade:#080a08}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="smoked"] #site-buy-board .dgx-module--tickets{--buy-base:#292218;--buy-light:#514534;--buy-shade:#13110c}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="smoked"] #site-buy-board .dgx-module--passes{--buy-base:#152c2d;--buy-light:#365353;--buy-shade:#0b1718}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="smoked"] #site-buy-board .dgx-module--luckboxes{--buy-base:#282033;--buy-light:#51415e;--buy-shade:#140e1c}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="smoked"] #site-buy-board .site-craps-cell{--buy-base:#0c3527;--buy-light:#286445;--buy-shade:#071f16}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="smoked"] #site-buy-board .site-degenerette-cell{--buy-base:#3b151b;--buy-light:#74303a;--buy-shade:#200b10}
+  body.layout-basic .jackpot-hero__machine:is([data-buy-palette="products"],[data-buy-palette="jewel"],[data-buy-palette="smoked"]) #site-buy-board .concept-game{border-color:#cdbd8844}
+}
+
+/* Casino felt alternatives: purple Luckboxes, green Craps and red Degenerette stay fixed. */
+@media(min-width:1100px){
+  .jackpot-hero__machine[data-buy-palette="felt-slate"]{--buy-base:#151413;--buy-light:#40352c;--buy-shade:#0b0908}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="felt-slate"] #site-buy-board .dgx-module--tickets{--buy-base:#20262f;--buy-light:#4b5768;--buy-shade:#10141c}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="felt-slate"] #site-buy-board .dgx-module--passes{--buy-base:#102b43;--buy-light:#326b92;--buy-shade:#071725}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="felt-slate"] #site-buy-board .dgx-module--luckboxes{--buy-base:#21102c;--buy-light:#58356b;--buy-shade:#0f0716}
+  .jackpot-hero__machine[data-buy-palette="felt-teal"]{--buy-base:#151413;--buy-light:#40352c;--buy-shade:#0b0908}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="felt-teal"] #site-buy-board .dgx-module--tickets{--buy-base:#0c3038;--buy-light:#286775;--buy-shade:#06191f}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="felt-teal"] #site-buy-board .dgx-module--passes{--buy-base:#292e33;--buy-light:#5b676c;--buy-shade:#13181c}
+  body.layout-basic .jackpot-hero__machine[data-buy-palette="felt-teal"] #site-buy-board .dgx-module--luckboxes{--buy-base:#21102c;--buy-light:#58356b;--buy-shade:#0f0716}
+}
+
+@media(min-width:1100px){
+  body.layout-basic .jackpot-hero__machine #site-buy-board .dgx-module--luckboxes .dgx-module__label{color:#f4e8cd;text-shadow:0 2px 3px #0009}
+}
+@media(min-width:1100px){
+  body.layout-basic .jackpot-hero__machine #site-buy-board .dgx-module--passes .dgx-module__art{overflow:visible}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .dgx-module--passes .dgx-module__art>img{transform:scale(1.12)}
+}
+
+/* Flat pass quantity stepper; keep the native input and its handlers. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__whale{grid-template-columns:minmax(0,1fr) 84px!important}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity{box-sizing:border-box;grid-template-columns:24px minmax(0,1fr) 24px;height:28px;gap:0;border:1px solid #aa94614d;border-radius:5px;background:#131711;box-shadow:none;overflow:hidden}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity :is(button,input){box-sizing:border-box;height:26px;min-height:0;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;transform:none}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity button{display:grid;place-items:center;font:500 17px/1 Inter,system-ui,sans-serif;color:#d6c598}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity button:disabled{opacity:.3}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity button:not(:disabled):hover{background:#a58c4326!important;color:#fff2c7}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity input{color:#fff2d3;font:700 11px/1 'Roboto Mono',monospace;outline:none}
+  body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity:focus-within{outline:1px solid #d8be7c;outline-offset:2px}
+}
+
+/* Clip only the decorative plate; dialogs and controls keep their own bounds. */
+@media(min-width:1100px){
+  body.layout-basic .jackpot-hero__machine{background:none}
+  body.layout-basic .jackpot-hero__machine::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:var(--site-cabinet-surface);clip-path:polygon(3.1% .8%,96.9% .8%,99.2% 3.1%,99.2% 96.9%,96.9% 99.2%,3.1% 99.2%,.8% 96.9%,.8% 3.1%)}
+}
+@media(min-width:1100px){
+  body.layout-basic .jackpot-hero__draw{background:none;box-shadow:none}
+  @container hub-rail (max-width:900px){
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers{grid-template-columns:88px minmax(0,1fr) 220px;gap:8px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:has([data-subscription-state="unavailable"]),
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offers:not(:has(>.pass-shop__subscription:not([hidden]))){grid-template-columns:88px minmax(0,1fr)}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__brand{width:88px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__offer{grid-template-columns:84px minmax(0,1fr)!important;gap:6px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__whale{grid-template-columns:minmax(0,1fr) 68px!important}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__quantity{grid-template-columns:18px minmax(0,1fr) 18px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-shop__catalog:not(:has(.pass-shop__offer--deity:not([hidden]))) .pass-shop__perks{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important;font-size:9px!important}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking:is([data-subscription-state="active"],[data-subscription-state="funds"]){grid-template-columns:minmax(0,1fr) 100px}
+    body.layout-basic[data-desktop-page] .info-rail .info-afking .pass-afking__account strong{font-size:10px!important}
+    body.layout-basic[data-desktop-page] .info-rail .dbb{grid-template-columns:minmax(125px,1fr) minmax(90px,.7fr) minmax(300px,2.5fr) minmax(85px,.7fr);--dbb-stat-width:90px;--dbb-value-size:1rem;gap:5px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__identity{grid-template-columns:36px minmax(0,1fr);gap:5px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__reactor,body.layout-basic[data-desktop-page] .info-rail .dbb__reactor img{width:36px;height:36px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__identity h2{font-size:12px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__identity-copy>small{font-size:8px}
+  }
+}
+@media(min-width:1100px){
+  @container hub-rail (max-width:780px){
+    body.layout-basic[data-desktop-info="referrals"] .info-rail .site-referral-strip{grid-template-columns:minmax(0,1fr) 170px;gap:8px}
+    body.layout-basic[data-desktop-info="referrals"] .info-rail .site-referral-strip>.site-referral-shell{grid-template-columns:minmax(208px,1fr) minmax(180px,1.05fr);gap:8px}
+    body.layout-basic .info-rail .site-referral-banner{--ad-stub:44px;grid-template-columns:28px minmax(0,1fr) var(--ad-stub)!important;column-gap:6px!important;padding-left:6px!important}
+    body.layout-basic .info-rail .site-referral-banner .deg-referral-card__coin{width:28px!important;height:28px!important}
+    body.layout-basic .info-rail .site-referral-banner .deg-referral-card__heading h2{font-size:clamp(12px,5.2cqi,16px)!important}
+    body.layout-basic .info-rail .site-referral-banner .deg-referral-card__copy strong{font-size:clamp(14px,6.5cqi,18px)!important}
+    body.layout-basic .site-referral-strip .site-referral-custom .deg-referral-dialog__custom-head strong{font-size:10px}
+    body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-referral-current-code"]{max-width:45px;font-size:8px}
+    body.layout-basic .site-referrals-inline .aff-network-stats{gap:5px}
+    body.layout-basic .site-referrals-inline .aff-network-stat span{font-size:8px}
+    body.layout-basic .site-referrals-inline .aff-network-stat strong{font-size:13px}
+    body.layout-basic[data-desktop-page] .info-rail .inv-level-btn small{font-size:9px;letter-spacing:0}
+    body.layout-basic[data-desktop-page] .info-rail .dbb{grid-template-columns:minmax(110px,1fr) minmax(74px,.7fr) minmax(270px,2.5fr) minmax(74px,.7fr);--dbb-stat-width:74px;--dbb-value-size:.85rem;gap:4px;padding-inline:5px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__identity{grid-template-columns:28px minmax(0,1fr);gap:4px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__reactor,body.layout-basic[data-desktop-page] .info-rail .dbb__reactor img{width:28px;height:28px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__identity h2{font-size:10px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__entry-meta{min-width:0;width:74px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__actual-multi{min-width:0}
+    body.layout-basic[data-desktop-page] .info-rail :is(.dbb-stat small,.dbb__actual-multi small){font-size:8px;letter-spacing:0}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__input-control input{font-size:14px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__burn span{font-size:11px}
+  }
+  .site-how-to-play{display:grid;grid-area:1 / 1;place-items:center;width:100%;height:100%;box-sizing:border-box;border:1px solid #79bfff;border-radius:50%;background:radial-gradient(circle at 35% 20%,#3089d7,#124a98 65%,#092858);box-shadow:inset 0 1px 2px #d6efff66,0 2px 4px #0008;color:#f3faff;text-align:center;text-decoration:none;font:850 clamp(6px,1.6cqi,8px)/1.15 Inter,system-ui,sans-serif;pointer-events:auto}
+  .site-how-to-play:hover{filter:brightness(1.14)}
+  .site-how-to-play:focus-visible{outline:2px solid #c2e4ff;outline-offset:3px}
+  .site-how-to-play[hidden],app-all-in-machine-control[data-site-help] :is(.jackpot-all-in-socket,.jackpot-all-in-button){display:none!important}
+}
+@media(max-width:1099px){.site-how-to-play{display:none!important}}
+@media(min-width:1100px){
+  @container hub-rail (max-width:780px){
+    body.layout-basic .info-rail .bottom-tools[data-info-slide="tokens"]:not([hidden]){--token-badge-size:26px;--token-padding:5px;--token-gap:5px;--token-amount-size:14px;grid-template-columns:48px}
+    body.layout-basic .info-rail .bottom-tools>.token-tools__brand svg{width:42px;height:34px}
+    body.layout-basic .info-rail .token-fund__note{font-size:9px;white-space:normal}
+    body.layout-basic .info-rail .sdgnrs-rail__vote{font-size:8px}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__entry-controls{min-width:0;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+    body.layout-basic[data-desktop-page] .info-rail .dbb__entry{min-width:0;grid-template-columns:74px minmax(0,1fr)}
+  }
+}
+/* Brand and context above the existing first-visit actions. */
+app-onboarding .onb-dialog{width:min(420px,calc(100vw - 32px));padding:28px 26px}
+app-onboarding .onb-logo{width:60px;height:60px;margin-bottom:14px;filter:none}
+app-onboarding .site-welcome-intro h2{font:850 25px/1.13 Inter,system-ui,sans-serif;letter-spacing:.06em;margin:0 0 18px;color:#f3eee4}
+app-onboarding .site-welcome-intro h2>span{color:#f13b46}
+app-onboarding .onb-copy{font:500 14px/1.65 Inter,system-ui,sans-serif;color:#cdc6d1}
+app-onboarding .onb-copy a{color:#9bcaff;text-decoration:underline;text-underline-offset:3px}
+app-onboarding .onb-copy a:hover{color:#d4eaff}
+app-onboarding .onb-copy a:focus-visible{outline:2px solid #9bcaff;outline-offset:4px}
+app-onboarding .onb-actions{margin-top:24px;gap:10px}
+app-onboarding .onb-dialog::after{display:none}
+@media(min-width:1100px){@container hub-rail (max-width:780px){body.layout-basic .info-rail .token-tools__brand strong{font-size:8px}}}
+/* Center the coin in the green half and size its whole scene together. */
+@media(min-width:1100px){
+  body.layout-basic .jackpot-hero .df-coin-stage{position:absolute;top:25%;left:0;width:100%;height:42%;transform:translateY(-50%);container-type:size;--site-flip-coin-size:min(46cqw,80cqh,220px)}
+  body.layout-basic .jackpot-hero .df-coin-zone{height:100%;min-height:0;padding:0;box-sizing:border-box}
+  body.layout-basic .jackpot-hero .df-reveal-cue{top:20%;right:9%;left:auto}
+  body.layout-basic .jackpot-hero .df-coin{width:var(--site-flip-coin-size);height:var(--site-flip-coin-size)}
+  body.layout-basic .jackpot-hero .df-once-daily{width:calc(var(--site-flip-coin-size) * 1.28)}
+  body.layout-basic .jackpot-hero .df-coin-stage::after{width:calc(var(--site-flip-coin-size) * 1.12);outline-offset:calc(var(--site-flip-coin-size) * .06)}
+  body.layout-basic .jackpot-hero :is(.df-reversi-card,.df-reversi-card--live-tap){left:calc(50% + var(--site-flip-coin-size) / 2 - 5px)}
+}
+
+/* Keep the original bounty plaque art and its corners in proportion. */
+@media(min-width:1100px){
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders{align-items:center}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader{height:auto;aspect-ratio:3}
+}
+body.layout-basic .records-rail__leader-card-art{object-fit:contain}
+/* A quiet funding preference lives beside the claimable ETH balance. */
+body.layout-basic .info-rail .token-fund--eth{position:relative}
+body.layout-basic .info-rail .bottom-tools[data-info-slide="tokens"]:not([hidden]) .token-fund>.site-spend-trigger{position:absolute;top:3px;right:3px;grid-area:auto;width:24px;height:24px;min-height:0;padding:0;border:0;border-radius:3px;background:transparent;color:#b4bbc5;font:500 18px/1 system-ui;z-index:2}
+body.layout-basic .info-rail .bottom-tools[data-info-slide="tokens"]:not([hidden]) .token-fund>.site-spend-trigger:hover{color:#fff0c3;background:#d9c58c16}
+.site-spend-popover{position:fixed;inset:auto;margin:0;box-sizing:border-box;width:290px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto;padding:14px;border:1px solid #827356;border-radius:9px;background:#191820;color:#eee7d6;box-shadow:0 10px 35px #0009;font:500 12px/1.4 Inter,system-ui,sans-serif}
+.site-spend-popover h2{margin:0;color:#e8d18d;font:750 11px/1.3 Inter,system-ui,sans-serif;letter-spacing:.08em}
+.site-spend-popover p{margin:4px 0 10px;color:#b8b0be;font-size:11px}
+.site-spend-popover [role="group"]{display:grid;gap:5px}
+.site-spend-popover button{position:relative;display:grid;gap:3px;width:100%;padding:8px 26px 8px 10px;border:1px solid transparent;border-radius:5px;background:#ffffff04;color:#ece5d7;text-align:left;font:600 12px/1.3 Inter,system-ui,sans-serif}
+.site-spend-popover button small{color:#aaa5b3;font-size:10px;font-weight:400}
+.site-spend-popover button i{position:absolute;right:9px;top:12px;color:#dbbf74;font-style:normal;visibility:hidden}
+.site-spend-popover button[aria-pressed="true"]{border-color:#bfa36b66;background:#a3894820}
+.site-spend-popover button[aria-pressed="true"] i{visibility:visible}
+.site-spend-popover button:hover{background:#ffffff0a}
+.site-spend-popover button:focus-visible{outline:2px solid #c9b77c;outline-offset:1px}
+
+/* Action feedback never adds a row or changes a control's dimensions. Native
+   popovers escape clipped rails and dialogs; click outside or Escape dismisses. */
+body.layout-basic .action-feedback[popover]:not([hidden]) {
+  position: fixed;
+  inset: auto 0 calc(1rem + env(safe-area-inset-bottom));
+  z-index: 2000;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: min(36rem, calc(100vw - 2rem));
+  max-height: 35dvh;
+  margin: 0 auto;
+  padding: .65rem .9rem;
+  overflow: auto;
+  border: 1px solid #b98767;
+  border-radius: 8px;
+  background: #2c1d20;
+  box-shadow: 0 .35rem 1.25rem #0008;
+  color: #ffe1c6;
+  font: 600 .8rem/1.4 "Inter", system-ui, sans-serif;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  transform: none;
+}
+body.layout-basic .action-feedback[hidden] { display: none !important; }
+@media (min-width: 1100px) {
+  body.layout-basic[data-desktop-page] .action-feedback[popover]:not([hidden]) {
+    bottom: calc(var(--info-rail-height, 0px) + 1rem);
+  }
+}
+
+/* Published layout uses the selected design without preview controls. */
+.site-palette-tools{display:none!important}

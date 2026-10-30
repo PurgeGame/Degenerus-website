@@ -111,7 +111,7 @@
        and styles the static dock markup at first paint. -->
   <link rel="stylesheet" href="/app/styles/mobile-pager.css?v=mobile-pass-checkout-20261028">
   <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=decimator-replay-20261028">
-  <link rel="stylesheet" href="/app/styles/token-tools.css?v=bottom-bar-polish-20261028">
+  <link rel="stylesheet" href="/app/styles/token-tools.css?v=hub-spending-20261029">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
        on the critical path of every page load and cost 46 requests for ethers'
@@ -164,7 +164,7 @@
       "/app/components/dgn-pop-board.js": "/app/components/dgn-pop-board.js?v=auto-reveal-audio-20261027",
       "/app/app/jackpot-sfx.js": "/app/app/jackpot-sfx.js?v=auto-reveal-audio-20261027",
       "/app/app/pack-watch.js": "/app/app/pack-watch.js?v=next-rng-only-20260930",
-      "/app/components/app-degenesis-hub.js": "/app/components/app-degenesis-hub.js?v=ticket-flip-toggle-20261029",
+      "/app/components/app-degenesis-hub.js": "/app/two-widget-hub/site-hub.js",
       "/app/app/main.js": "/app/app/main.js?v=loading-baf-20261027",
       "/app/app/mine-flip.js": "/app/app/mine-flip.js?v=mining-reward-20261003",
       "/app/app/ui-preferences.js": "/app/app/ui-preferences.js?v=blur-balances-20261006",
@@ -191,7 +191,7 @@
       "/app/components/gold-rush-headline.js": "/app/components/gold-rush-headline.js?v=tutorial-fixtures-13",
       "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=decimator-battle-20260930",
       "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=ticket-popup-only-20261028",
-      "/app/components/app-token-funds.js": "/app/components/app-token-funds.js?v=bottom-bar-polish-20261028",
+      "/app/components/app-token-funds.js": "/app/components/app-token-funds.js?v=hub-spending-20261029",
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=jackpot-cache-handoff-20261029",
       "/app/components/app-sacrifice-panel.js": "/app/components/app-sacrifice-panel.js?v=boon-tooltip-fit-20261001",
       "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=referral-bounty-fit-20261028",
@@ -243,7 +243,7 @@
   <!-- Tutorial frames paint the production UI once, then freeze its pollers so
        scripted training values do not visibly fight live background refreshes. -->
   <script src="/app/app/tutorial-frame-freeze.js"></script>
-</head>
+<meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/app/two-widget-hub/site-preview.css"></head>
 <body class="layout-basic" data-mobile-page="draw" data-desktop-page="daily">
   <!-- Statically VISIBLE on the testnet deployment: the JS unhide used to
        push the whole page down 43px after first paint (0.18 of mobile CLS).
@@ -327,7 +327,7 @@
            instead of waiting for the module graph to execute. The component
            ADOPTS these nodes via the data-el hooks — keep both copies in sync
            (index-structure.test.js asserts the hooks are present here). -->
-      <gold-rush-headline class="gr" data-mpage="draw" data-dpage="daily">
+      <gold-rush-headline data-banner-style="original" data-number-font="audiowide" class="gr" data-mpage="draw" data-dpage="daily">
         <div class="gr__inner">
           <div class="gr__masthead">
             <span class="gr__brand">
@@ -339,7 +339,7 @@
             </span>
             <span class="gr__masthead-divider" aria-hidden="true"></span>
             <div class="gr__label">
-              <span class="gr__label-text">Golden Ticket Jackpot</span>
+              <span class="gr__label-text"><span class="concept-golden">Golden</span> <span class="concept-ticket">Ticket</span> <span class="concept-jackpot">Jackpot</span></span>
               <span class="gr__chip" data-el="chip" hidden></span>
             </div>
           </div>
@@ -425,7 +425,10 @@
             <!-- This mount never disappears. Low-score players see its pale
                  capped socket; earned eligibility swaps the same footprint to
                  the red ALL IN control without moving the cabinet layout. -->
-            <app-all-in-machine-control></app-all-in-machine-control>
+            <div class="concept-degen-score" role="img" aria-label="Degen rating loading" title="Your Degen Rating">
+  <div class="concept-degen-window"><svg class="concept-degen-digits" viewBox="-5 0 114 60" aria-hidden="true"><g data-digit="0" transform="translate(0 0)"><polygon data-segment="a" points="6,2 22,2 26,6 22,10 6,10 2,6" class=""/><polygon data-segment="b" points="27,7 31,11 31,25 27,29 23,25 23,11" class=""/><polygon data-segment="c" points="27,31 31,35 31,49 27,53 23,49 23,35" class=""/><polygon data-segment="d" points="6,50 22,50 26,54 22,58 6,58 2,54" class=""/><polygon data-segment="e" points="1,31 5,35 5,49 1,53 -3,49 -3,35" class=""/><polygon data-segment="f" points="1,7 5,11 5,25 1,29 -3,25 -3,11" class=""/><polygon data-segment="g" points="6,26 22,26 26,30 22,34 6,34 2,30" class=""/></g><g data-digit="1" transform="translate(38 0)"><polygon data-segment="a" points="6,2 22,2 26,6 22,10 6,10 2,6" class=""/><polygon data-segment="b" points="27,7 31,11 31,25 27,29 23,25 23,11" class=""/><polygon data-segment="c" points="27,31 31,35 31,49 27,53 23,49 23,35" class=""/><polygon data-segment="d" points="6,50 22,50 26,54 22,58 6,58 2,54" class=""/><polygon data-segment="e" points="1,31 5,35 5,49 1,53 -3,49 -3,35" class=""/><polygon data-segment="f" points="1,7 5,11 5,25 1,29 -3,25 -3,11" class=""/><polygon data-segment="g" points="6,26 22,26 26,30 22,34 6,34 2,30" class=""/></g><g data-digit="2" transform="translate(76 0)"><polygon data-segment="a" points="6,2 22,2 26,6 22,10 6,10 2,6" class=""/><polygon data-segment="b" points="27,7 31,11 31,25 27,29 23,25 23,11" class=""/><polygon data-segment="c" points="27,31 31,35 31,49 27,53 23,49 23,35" class=""/><polygon data-segment="d" points="6,50 22,50 26,54 22,58 6,58 2,54" class=""/><polygon data-segment="e" points="1,31 5,35 5,49 1,53 -3,49 -3,35" class=""/><polygon data-segment="f" points="1,7 5,11 5,25 1,29 -3,25 -3,11" class=""/><polygon data-segment="g" points="6,26 22,26 26,30 22,34 6,34 2,30" class=""/></g></svg></div><span class="concept-degen-label" aria-hidden="true">DEGEN %</span>
+</div>
+<app-all-in-machine-control></app-all-in-machine-control>
             <h2 class="jackpot-hero__draw-title" aria-label="Degenerus Daily Drawing">
               <img class="jackpot-hero__draw-mark" src="/app/assets/jackpot/flame-center-silver.svg"
                    width="38" height="54" alt="" aria-hidden="true">
@@ -437,7 +440,7 @@
                  the day 9 change, which runs the first daily jackpot. Inert (and
                  never loads the purchase module) outside that window. -->
             <app-degenesis-hub></app-degenesis-hub>
-            <replay-panel single-button></replay-panel>
+            <replay-panel id="site-draw-board" single-button></replay-panel><replay-panel id="site-buy-board" data-hub-board data-degenesis single-button></replay-panel>
           </div>
           <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden
                aria-label="Jackpot day history">
@@ -450,6 +453,11 @@
           <div class="jackpot-hero__summary-slot" data-bind="day-summary-slot" hidden></div>
         </div>
         <app-decimator-panel data-mpage="buy"></app-decimator-panel>
+<aside class="concept-thermo" aria-label="Level prize pool" title="Level prize pool">
+  <div class="concept-level"><small>LEVEL</small><strong>—</strong></div>
+  <div class="concept-track" role="progressbar" aria-label="Level prize pool" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0" aria-valuetext="Prize pool loading"><div></div></div>
+  <div class="concept-pool-amount"><strong>—</strong><span>/ — <small>ETH</small></span></div>
+</aside>
         <app-daily-flip data-mpage="flip"></app-daily-flip>
       </section>
 
@@ -546,6 +554,16 @@
       </section>
 
       <section class="bottom-tools" data-mpage="more" data-info-slide="tokens" aria-label="Token balances, funding, and charity">
+        <div class="token-tools__brand" aria-label="Balances">
+          <svg viewBox="0 0 80 64" fill="none" aria-hidden="true">
+            <path d="M12 22 55 10a4 4 0 0 1 5 4v10H16a6 6 0 0 0-6 6" fill="#413721" stroke="#c8ac72" stroke-width="2"/>
+            <rect x="10" y="24" width="60" height="32" rx="6" fill="#25251f" stroke="#dfc78e" stroke-width="2"/>
+            <path d="M15 31h48M15 49h48" stroke="#b39b6366"/>
+            <path d="M59 34h13v12H59a6 6 0 0 1 0-12Z" fill="#685434" stroke="#dfc78e" stroke-width="2"/>
+            <circle cx="60" cy="40" r="2" fill="#fff1cb"/>
+          </svg>
+          <strong>BALANCES</strong>
+        </div>
         <app-token-funds></app-token-funds>
         <app-wwxrp-burn hidden></app-wwxrp-burn>
         <app-sdgnrs-burn-rail></app-sdgnrs-burn-rail>
@@ -768,7 +786,7 @@
   <!-- Tiny control mounted inside the first-screen drawing machine. Keep it
        eager; the two large outer hero columns are scheduled below. -->
   <script type="module" src="/app/components/app-all-in-machine-control.js"></script>
-  <script type="module" src="/app/components/app-degenesis-hub.js?v=ticket-flip-toggle-20261029"></script>
+  <script type="module" src="/app/two-widget-hub/site-hub.js"></script>
   <script type="module">
     import { mountPanelPopups } from "/app/app/panel-popups.js";
     mountPanelPopups();
@@ -1094,5 +1112,5 @@
       ...LAZY_PANELS.map(([, src]) => src),
     ]));
   </script>
-</body>
+<script type="module" src="/app/two-widget-hub/site-preview.js"></script></body>
 </html>
