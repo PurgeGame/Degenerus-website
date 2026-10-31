@@ -1571,25 +1571,27 @@ body.layout-basic .jackpot-hero__machine
   outline-offset: 2px;
 }
 
-/* Reuse the game's quest waypoint so claimable foil work reads like every
-   other actionable objective. The ticket clips its foil quadrants, so the
-   marker is a sibling button on the overflow-visible socket; both controls
-   invoke the exact same immutable claim tuple. */
+/* A tapping pointer and lit rim invite a click without covering the foil in
+   text. The whole winning ticket and the small pointer share one claim. */
 body.layout-basic .jackpot-hero__machine .ldj-foil-claim-marker {
   position: absolute;
   z-index: 7;
-  top: -0.52rem;
-  right: -0.48rem;
+  bottom: -7px;
+  right: -7px;
   display: block;
-  width: 1.12rem;
-  height: 1.12rem;
+  width: clamp(24px, 4cqi, 30px);
+  height: clamp(24px, 4cqi, 30px);
+  min-width: 0;
+  min-height: 0;
   appearance: none;
   margin: 0;
   padding: 0;
-  border: 0;
-  background: url('/app/assets/quest-objective-tail-bottom-left.svg') center / contain no-repeat;
+  border: 1px solid #ffe7a0;
+  border-radius: 50%;
+  background: url('/app/assets/foil-claim-pointer.svg') center / 80% 80% no-repeat,
+    radial-gradient(circle at 40% 30%, #80601e, #211908);
+  box-shadow: inset 0 1px #fff8d655, 0 2px 5px #000a, 0 0 10px #edc76699;
   cursor: pointer;
-  filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.78));
   pointer-events: auto;
   animation: ldj-foil-claim-marker 0.92s ease-in-out infinite alternate;
 }
@@ -1624,8 +1626,8 @@ body.layout-basic .jackpot-hero__machine
 }
 
 @keyframes ldj-foil-claim-marker {
-  from { transform: translateY(0) scale(0.96); }
-  to { transform: translateY(-1px) scale(1.05); }
+  from { transform: translate(1px, 1px) scale(0.96); }
+  to { transform: translate(-1px, -2px) scale(1.05); }
 }
 
 /* The centre never comes up with a hit. The quadrant is the claim; the centre
