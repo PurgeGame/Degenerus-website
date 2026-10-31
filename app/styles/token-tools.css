@@ -54,6 +54,9 @@ body.layout-basic .info-rail .bottom-tools[data-info-slide="tokens"]:not([hidden
     text-align: left;
   }
   & .token-fund__badge { grid-area: 1 / 1; width: var(--token-badge-size); height: var(--token-badge-size); object-fit: contain; }
+  /* The two-card AFKing mark needs more width to match the round badges' height. */
+  & .token-fund--afking { --token-badge-size: 4rem; }
+  & .token-fund--afking .token-fund__badge { height: 2.75rem; }
   & .token-fund > strong { grid-area: 1 / 2; display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .3rem; min-width: 0; color: #efe3f6; font: 750 var(--token-amount-size)/1.2 'Roboto Mono', monospace; font-variant-numeric: tabular-nums; }
   & .token-fund__amount b { min-width: 0; max-width: 100%; white-space: nowrap; font-weight: inherit; font-size: min(1em, calc((100cqi - var(--token-badge-size) - .4rem) * 1.6 / var(--token-amount-chars, 6))); }
   & .token-fund__amount em { color: #c7b9cf; font: 650 .65rem/1.2 Inter, sans-serif; }
