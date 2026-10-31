@@ -46,26 +46,30 @@
 .dgn-winnings.is-currency { border-color: #d9bb68; }
 .dgn-winnings.is-currency .dgn-winnings__value { font-size: clamp(1.5rem, 5vw, 1.85rem); letter-spacing: .04em; }
 .dgn-winnings.is-currency .dgn-winnings__status { color: #ead394; font-size: .65rem; }
-/* The three badges share the existing payout bar; the selector and result
-   never change its height or move the cards above it. */
-.dgn-winnings.has-currency-options { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'label' 'amount' 'status'; row-gap: 1px; padding: 4px 16px; }
-.dgn-winnings.has-currency-options .dgn-winnings__reward,
-.dgn-winnings.has-currency-options .dgn-winnings__amount { display: none; }
-.dgn-winnings.has-currency-options .dgn-winnings__label,
-.dgn-winnings.has-currency-options .dgn-winnings__status { text-align: center; }
+/* The selector owns the same right-hand slot during the scan, currency lock,
+   and payout. Later rewards can use the left side without moving the badges. */
+.dgn-winnings:is(.has-currency-options, .has-currency-result) {
+  grid-template-columns: minmax(0, 1fr) 126px;
+  grid-template-areas: 'label currencies' 'amount currencies' 'status currencies';
+  column-gap: 8px; padding-inline: 8px;
+}
+.dgn-winnings:is(.has-currency-options, .has-currency-result) .dgn-winnings__reward { display: none; }
+.dgn-winnings:is(.has-currency-options, .has-currency-result) .rvl-box-currency-options {
+  grid-area: currencies; align-self: center;
+}
 .rvl-box-currency-options {
   position: relative; isolation: isolate; grid-area: amount; display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   justify-self: center; width: 100%; max-width: 252px; min-width: 0; height: 64px;
 }
 .rvl-box-currency-selector {
-  position: absolute; z-index: -1; top: 8px; left: 4px; right: 4px; height: 44px;
+  position: absolute; z-index: -1; top: 9px; left: 0; right: 0; height: 34px;
   border-radius: 28px; background: #07100c; pointer-events: none;
   box-shadow: inset 0 2px 7px #000b, inset 0 0 0 1px #c3aa6540;
 }
 .rvl-box-currency-option {
   position: relative; display: grid; justify-items: center; align-content: start;
-  gap: 6px; min-width: 0; padding-top: 6px; color: #ffe7a5;
+  gap: 12px; min-width: 0; padding-top: 8px; color: #ffe7a5;
   font: 850 8px/1 system-ui; letter-spacing: .06em;
 }
 .rvl-box-currency-option::before {
@@ -74,11 +78,11 @@
   opacity: 0; filter: drop-shadow(0 0 3px #eac361);
 }
 .rvl-box-currency-option::after {
-  content: ''; position: absolute; top: 52px; width: 24px; height: 2px;
+  content: ''; position: absolute; top: 44px; width: 18px; height: 2px;
   border-radius: 2px; background: #6d654a; opacity: .4;
 }
 .rvl-box-currency-option img {
-  width: 44px; height: 44px; object-fit: contain; opacity: .8;
+  width: 32px; height: 32px; object-fit: contain; opacity: .8;
   filter: brightness(.82); transform: scale(.94);
   transition: opacity var(--rvl-currency-fade-ms, 180ms), filter 100ms, transform 100ms;
 }
@@ -87,21 +91,8 @@
 .rvl-box-currency-option.is-active::after { opacity: 1; background: #ffe29a; box-shadow: 0 0 7px #f4cf70b3; }
 .rvl-box-currency-option.is-active img { opacity: 1; filter: brightness(1.1) drop-shadow(0 0 4px #f7d98550); transform: scale(1.04); }
 .rvl-box-currency-options.is-settled .rvl-box-currency-option:not(.is-selected) img { opacity: .17; filter: grayscale(.65) brightness(.7); transform: scale(.86); }
-.rvl-box-currency-options.is-settled .rvl-box-currency-option.is-selected::after { width: 32px; }
+.rvl-box-currency-options.is-settled .rvl-box-currency-option.is-selected::after { width: 24px; }
 .rvl-box-currency-options.is-named .rvl-box-currency-option.is-selected > span { opacity: 1; }
-.dgn-winnings.has-currency-options .dgn-winnings__status { min-height: .65rem; font-size: .56rem; letter-spacing: .02em; }
-.dgn-winnings.has-currency-result {
-  grid-template-columns: minmax(0, 1fr) 126px;
-  grid-template-areas: 'label currencies' 'amount currencies' 'status currencies';
-  column-gap: 8px;
-}
-.dgn-winnings.has-currency-result .dgn-winnings__reward { display: none; }
-.dgn-winnings.has-currency-result .rvl-box-currency-options { grid-area: currencies; align-self: center; }
-.dgn-winnings.has-currency-result .rvl-box-currency-option { padding-top: 8px; gap: 12px; }
-.dgn-winnings.has-currency-result .rvl-box-currency-option img { width: 32px; height: 32px; }
-.dgn-winnings.has-currency-result .rvl-box-currency-selector { top: 9px; left: 0; right: 0; height: 34px; }
-.dgn-winnings.has-currency-result .rvl-box-currency-option::after { top: 44px; width: 18px; }
-.dgn-winnings.has-currency-result .rvl-box-currency-option.is-selected::after { width: 24px; }
 /* Keep the later survival flip and any earned, clickable Luckbox beside the
    amount while the selected currency remains on the right. */
 .dgn-winnings.has-currency-result:has(.rvl-survival, .dgn-winnings__lootbox:not([hidden])) {
