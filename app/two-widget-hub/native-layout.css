@@ -2,7 +2,7 @@
 body.layout-basic{padding:0 18px 32px!important;overflow:auto!important}
 body.layout-basic #app-workspace{display:block!important;max-width:1160px;margin:22px auto;padding:0!important;transform:none!important}
 .concept-tools{position:relative;z-index:50;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;color:#b9bcb2;border-bottom:1px solid #383a31;font:11px Inter,system-ui,sans-serif}.concept-tools strong{font-size:10px;letter-spacing:1.5px;color:#ddc58e}.concept-tools label{display:flex;gap:6px;align-items:center}.concept-tools select,.concept-tools button{background:#191e19;color:#dedccd;padding:7px;border:1px solid #4a4d3e;border-radius:4px;font:inherit;cursor:pointer}.concept-tools button:hover{border-color:#e6bb66}
-body.layout-basic .jackpot-hero{grid-template-columns:minmax(0,1fr) 62px minmax(0,1fr)!important;grid-template-areas:"draw pool flip"!important;gap:14px;background:none;border:none;box-shadow:none;overflow:visible;align-items:start;margin-top:18px}
+body.layout-basic .jackpot-hero{grid-template-columns:minmax(0,1fr) var(--site-thermo-width,62px) minmax(0,1fr)!important;grid-template-areas:"draw pool flip"!important;gap:14px;background:none;border:none;box-shadow:none;overflow:visible;align-items:start;margin-top:18px}
 body.layout-basic .jackpot-hero__draw{grid-area:draw;min-width:0;padding:0!important;border:0!important}
 body.layout-basic .jackpot-hero__draw::before{display:none}
 body.layout-basic .jackpot-hero > app-daily-flip{grid-area:flip;border:0!important;min-width:0;align-self:stretch}
