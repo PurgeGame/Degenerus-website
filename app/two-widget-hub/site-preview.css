@@ -318,17 +318,17 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   #site-buy-board .concept-game[hidden]{display:none!important}
   #site-buy-board .site-game-art{display:grid;grid-template-rows:minmax(0,1fr) 32% auto;gap:4px;width:100%;height:100%;min-height:0;min-width:0;padding:0;border:0;background:none;cursor:pointer}
   #site-buy-board .site-feature-logo{display:block;position:static;width:100%;height:100%;min-height:0;object-fit:contain;transform:none}
-  #site-buy-board .site-feature-cards{position:relative;display:block;min-height:0;width:100%;height:100%;filter:drop-shadow(0 5px 3px #12030b88)}
-  #site-buy-board .site-feature-card{position:absolute;display:grid;place-items:center;left:33%;top:2%;width:34%;height:88%;box-sizing:border-box;border:2px solid #d6b66b;border-radius:8%;background:linear-gradient(135deg,#fff4d9,#d5c5a0);box-shadow:inset 0 0 0 2px #fff8df77,0 2px 4px #0008}
-  #site-buy-board .site-feature-card:first-child{left:15%;top:10%;transform:rotate(-18deg)}
-  #site-buy-board .site-feature-card:nth-child(2){z-index:2}
-  #site-buy-board .site-feature-card:last-child{left:51%;top:10%;transform:rotate(18deg)}
-  #site-buy-board .site-feature-card img{width:90%;height:90%;object-fit:contain;filter:none}
-  #site-buy-board .site-feature-play{display:flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;width:100%;min-height:24px;padding:4px;border:1px solid #e8c574;border-radius:4px;background:linear-gradient(#f4d47c,#b98a36);box-shadow:inset 0 1px #fff4c366,0 2px 3px #0004;color:#2b180d;font:850 clamp(9px,2cqi,12px)/1.2 Inter,sans-serif;letter-spacing:.045em}
-  #site-buy-board .site-degenerette-cell .site-game-art:hover .site-feature-play{filter:brightness(1.12)}
+  #site-buy-board .site-degenerette-cell{grid-template-rows:minmax(0,1fr) auto auto;gap:6px;padding:5% 4% 6%}
+  #site-buy-board .site-degenerette-cell .site-game-art{grid-template-rows:minmax(0,1fr)}
+  #site-buy-board .site-degenerette-cell .site-feature-logo{filter:drop-shadow(0 3px 5px #17020b99)}
+  #site-buy-board .site-degenerette-cell .site-game-art:hover{filter:brightness(1.1)}
+  #site-buy-board .site-degenerette-wager{display:block;min-width:0;color:#fff0cf;font:700 clamp(8px,1.9cqi,12px)/1.25 Inter,sans-serif;text-align:center;overflow-wrap:anywhere}
+  #site-buy-board .site-degenerette-quickplay{width:100%;min-height:26px;padding:5px 4px;border:1px solid #e8c574;border-radius:4px;background:linear-gradient(#f4d47c,#b98a36);box-shadow:inset 0 1px #fff4c366,0 2px 3px #0004;color:#2b180d;font:850 clamp(9px,2cqi,12px)/1.2 Inter,sans-serif;letter-spacing:.045em;cursor:pointer}
+  #site-buy-board .site-degenerette-quickplay:disabled{opacity:.55;cursor:default}
+  #site-buy-board .site-degenerette-quickplay:not(:disabled):hover{filter:brightness(1.12)}
   #site-buy-board .site-feature-dice{display:block;min-height:0;width:100%;height:100%}
   #site-buy-board .site-feature-dice img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 3px 3px #00120c66)}
-  #site-buy-board .site-game-art:focus-visible,#site-buy-board .site-craps-buy:focus-visible{outline:2px solid #e0c282;outline-offset:2px}
+  #site-buy-board .site-game-art:focus-visible,#site-buy-board .site-craps-buy:focus-visible,#site-buy-board .site-degenerette-quickplay:focus-visible{outline:2px solid #e0c282;outline-offset:2px}
   #site-buy-board .site-craps-cell{grid-template-rows:minmax(0,1fr) auto auto;gap:4px}
   #site-buy-board .site-craps-cell .site-game-art{grid-template-rows:minmax(0,1fr) 34%;gap:2px}
   #site-buy-board .site-craps-countdown{color:#f1fff6;text-shadow:0 1px 2px #001d12;font:600 clamp(8px,1.8cqi,11px)/1.2 Inter,system-ui,sans-serif;white-space:nowrap}
