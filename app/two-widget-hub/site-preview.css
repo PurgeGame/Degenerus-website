@@ -47,6 +47,14 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   body.site-bottom-utilities #nav-slot{display:none!important}
   body.layout-basic.site-bottom-utilities .info-rail__nav{gap:4px;padding-inline:6px;align-items:center}
   body.layout-basic .info-rail__nav>#unav-discord-app{margin-right:auto}
+  body.layout-basic .info-rail__nav>#unav-discord-app:has(+.nav-jackpot-countdown){margin-right:0}
+  body.layout-basic .info-rail__nav>.nav-jackpot-countdown{
+    display:flex;align-items:center;gap:5px;flex:none;white-space:nowrap;
+    height:24px;min-height:24px;margin-right:auto;padding:0 6px;
+    border:0;background:transparent;box-shadow:none;color:#dec387;
+  }
+  body.layout-basic .info-rail__nav .nav-jackpot-countdown__label{font:700 8px/1 Inter,sans-serif;letter-spacing:.04em}
+  body.layout-basic .info-rail__nav .nav-jackpot-countdown__value{font:700 12px/1 Inter,sans-serif;font-variant-numeric:tabular-nums}
   body.layout-basic .info-rail__nav>.nav-settings{margin-left:auto;position:static}
   body.layout-basic .info-rail__nav>.nav-btn,
   body.layout-basic .info-rail__nav .nav-settings__trigger{
@@ -163,7 +171,7 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   body.layout-basic .mpager-tabs>#unav-wallet-app svg{width:20px;height:20px}
 }
 
-#site-buy-board,.concept-degen-score,.concept-thermo,.site-buy-in{display:none}
+#site-buy-board,.concept-degen-score,.concept-thermo,.site-view-switch{display:none}
 @media(min-width:1100px){
   body.layout-basic[data-desktop-page]{
     --desktop-width:min(calc(100vw - 120px),var(--hub-width,1160px));
@@ -196,8 +204,33 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   .concept-thermo{display:flex}
   .concept-track{min-height:100px}
   .concept-track>div{height:var(--site-pool-fill,0%)}
-  .site-buy-in{display:block;position:absolute;right:10px;bottom:8px;z-index:20;background:#111c16;color:#d3bd83;border:1px solid #655737;border-radius:4px;padding:5px 8px;font-size:9px;cursor:pointer}
-  .site-buy-in[hidden]{display:none}
+  /* A permanent cabinet selector mirrors the score window on the other rail. */
+  .site-view-switch{
+    position:absolute;right:3.2%;top:46%;transform:translateY(-50%);z-index:20;
+    box-sizing:border-box;width:12.4%;display:grid;gap:5px;text-align:center;
+  }
+  .site-view-switch[hidden]{display:none}
+  .site-view-switch__label{color:#b7bea9;font:750 clamp(6px,1.5cqi,9px)/1 Inter,sans-serif;letter-spacing:.14em}
+  .site-view-switch__keys{
+    display:grid;gap:2px;padding:3px;border:1px solid #8d795555;border-radius:5px;
+    background:linear-gradient(180deg,#151a12,#050905);box-shadow:inset 0 1px #e4d5a41c,0 2px 4px #0008;
+  }
+  .site-view-switch button{
+    display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box;
+    min-width:0;min-height:27px;padding:6px 2px;border:1px solid transparent;border-radius:2px;
+    background:#10160f;color:#aaa98c;font:750 clamp(7px,1.65cqi,10px)/1.2 Inter,sans-serif;
+    letter-spacing:.025em;white-space:nowrap;cursor:pointer;transition:color 120ms,background 120ms,border-color 120ms;
+  }
+  .site-view-switch button::before{content:'';width:3px;height:3px;flex:none;border-radius:50%;background:#454b37}
+  .site-view-switch button[aria-pressed="true"]{
+    border-color:#a58b4c88;background:linear-gradient(#393b24,#202b1c);color:#f4d998;
+    box-shadow:inset 0 1px #f4dfa51a;
+  }
+  .site-view-switch button[aria-pressed="true"]::before{background:#efd18a;box-shadow:0 0 5px #ebcd8880}
+  .site-view-switch button:hover:not(:disabled){color:#fff0c7;border-color:#bca56a;background:#2d3823}
+  .site-view-switch button:focus-visible{outline:2px solid #f4dc9c;outline-offset:2px}
+  .site-view-switch button:disabled{color:#686e5d;cursor:default}
+  @media(prefers-reduced-motion:reduce){.site-view-switch button{transition:none}}
   body.layout-basic .jackpot-hero__draw:has([data-hub-face="buy"]) > .jackpot-day-history,
   body.layout-basic .jackpot-hero__draw:has([data-hub-face="buy"]) > .jackpot-hero__summary-slot{display:none!important}
   body.layout-basic .jackpot-hero__machine #site-buy-board .replay-ticket-center{pointer-events:auto;cursor:default}
@@ -280,16 +313,24 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   body.layout-basic .jackpot-hero__machine[data-buy-palette]:not([data-buy-palette="original"]) #site-buy-board :is(.dgx-module,.concept-game):hover{box-shadow:inset 0 0 22px #ffffff13}
 }
 @media(min-width:1100px){
-  #site-buy-board .concept-games{grid-template-rows:48% 52%}
-  #site-buy-board .concept-game{padding:4% 6%;cursor:default}
-  #site-buy-board .site-degenerette-cell{padding:18% 8% 4%}
-  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .concept-games{grid-template-rows:52% 48%}
-  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .site-degenerette-cell{padding:3% 3% 2%}
-  #site-buy-board .site-game-art{display:block;width:100%;height:100%;min-height:0;padding:0;border:0;background:none;cursor:pointer}
-  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .site-degenerette-cell .site-game-art{position:relative;overflow:hidden}
-  .jackpot-hero__machine[data-degenerette-logo="compact"] #site-buy-board .site-degenerette-cell img{position:static;width:100%;height:100%;object-fit:contain;transform:none}
+  #site-buy-board .concept-games{grid-template-rows:minmax(0,1fr);overflow:hidden}
+  #site-buy-board .concept-game{box-sizing:border-box;grid-area:1/1;grid-template-rows:minmax(0,1fr);padding:9% 7% 6%;border:0;cursor:default;overflow:hidden}
+  #site-buy-board .concept-game[hidden]{display:none!important}
+  #site-buy-board .site-game-art{display:grid;grid-template-rows:minmax(0,1fr) 32% auto;gap:4px;width:100%;height:100%;min-height:0;min-width:0;padding:0;border:0;background:none;cursor:pointer}
+  #site-buy-board .site-feature-logo{display:block;position:static;width:100%;height:100%;min-height:0;object-fit:contain;transform:none}
+  #site-buy-board .site-feature-cards{position:relative;display:block;min-height:0;width:100%;height:100%;filter:drop-shadow(0 5px 3px #12030b88)}
+  #site-buy-board .site-feature-card{position:absolute;display:grid;place-items:center;left:33%;top:2%;width:34%;height:88%;box-sizing:border-box;border:2px solid #d6b66b;border-radius:8%;background:linear-gradient(135deg,#fff4d9,#d5c5a0);box-shadow:inset 0 0 0 2px #fff8df77,0 2px 4px #0008}
+  #site-buy-board .site-feature-card:first-child{left:15%;top:10%;transform:rotate(-18deg)}
+  #site-buy-board .site-feature-card:nth-child(2){z-index:2}
+  #site-buy-board .site-feature-card:last-child{left:51%;top:10%;transform:rotate(18deg)}
+  #site-buy-board .site-feature-card img{width:90%;height:90%;object-fit:contain;filter:none}
+  #site-buy-board .site-feature-play{display:flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;width:100%;min-height:24px;padding:4px;border:1px solid #e8c574;border-radius:4px;background:linear-gradient(#f4d47c,#b98a36);box-shadow:inset 0 1px #fff4c366,0 2px 3px #0004;color:#2b180d;font:850 clamp(9px,2cqi,12px)/1.2 Inter,sans-serif;letter-spacing:.045em}
+  #site-buy-board .site-degenerette-cell .site-game-art:hover .site-feature-play{filter:brightness(1.12)}
+  #site-buy-board .site-feature-dice{display:block;min-height:0;width:100%;height:100%}
+  #site-buy-board .site-feature-dice img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 3px 3px #00120c66)}
   #site-buy-board .site-game-art:focus-visible,#site-buy-board .site-craps-buy:focus-visible{outline:2px solid #e0c282;outline-offset:2px}
-  #site-buy-board .site-craps-cell{grid-template-rows:minmax(0,1fr) auto auto;gap:3px;padding:3% 6% 4%}
+  #site-buy-board .site-craps-cell{grid-template-rows:minmax(0,1fr) auto auto;gap:4px}
+  #site-buy-board .site-craps-cell .site-game-art{grid-template-rows:minmax(0,1fr) 34%;gap:2px}
   #site-buy-board .site-craps-countdown{color:#f1fff6;text-shadow:0 1px 2px #001d12;font:600 clamp(8px,1.8cqi,11px)/1.2 Inter,system-ui,sans-serif;white-space:nowrap}
   #site-buy-board .site-craps-buy{width:100%;min-height:22px;padding:3px 4px;border:1px solid rgba(253,224,71,.72);border-radius:4px;background:linear-gradient(180deg,#f5c842,#b8790a);color:#241600;box-shadow:inset 0 1px rgba(255,255,255,.28),0 1px 2px #0004;font:800 clamp(9px,2cqi,12px)/1.2 Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
   #site-buy-board .site-craps-buy:disabled{opacity:.55;cursor:default}
@@ -617,9 +658,9 @@ body.layout-basic .action-feedback[hidden] { display: none !important; }
   body.layout-basic .jackpot-hero>app-daily-flip{height:98.4%;min-height:0;align-self:center}
 }
 
-/* Clip the raster's rectangular backing to the original engraved outline. */
+/* The vector plaque has its own transparent outline and no inset value boxes. */
 body.layout-basic .records-rail__leader-card-art{
-  mask:url('./art/bounty-plaque-mask.svg') center / 100% 100% no-repeat;
+  mask:none;
   filter:none;
 }
 body.layout-basic .records-rail__leader-bet{background:transparent;box-shadow:none}
@@ -629,8 +670,8 @@ body.layout-basic .records-rail__leader-bet{background:transparent;box-shadow:no
   body.layout-basic[data-desktop-page] .info-rail .records-rail__wordmark img{max-height:66px;object-position:center}
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders{gap:8px}
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leader{container-type:inline-size}
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title{top:10%;bottom:48%;gap:3px;padding:0 1%;letter-spacing:.025em}
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title>span{font-size:clamp(7px,4.5cqi,12px);line-height:1;-webkit-text-stroke:0}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title{top:8%;bottom:44%;gap:1px;padding:0 1%;letter-spacing:.025em}
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title>span{font-size:clamp(10px,8cqi,20px);line-height:1;-webkit-text-stroke:0}
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title>strong{font-size:clamp(8px,5.7cqi,15px);line-height:1.1;letter-spacing:.03em}
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-holder{font-size:clamp(7px,4.7cqi,12px);line-height:1.15;font-weight:700}
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-value{font-size:clamp(8px,5.8cqi,15px)}
@@ -653,8 +694,7 @@ body.layout-basic #site-buy-board .site-tile-indicators{
 }
 body.layout-basic #site-buy-board [data-dgx-kind="passes"] .site-tile-indicators,
 body.layout-basic #site-buy-board .concept-game .site-tile-indicators{left:auto;right:8px}
-body.layout-basic #site-buy-board .site-craps-cell .site-tile-indicators{top:auto;bottom:32px}
-body.layout-basic #site-buy-board .site-degenerette-cell .site-tile-indicators{top:3px}
+body.layout-basic #site-buy-board .concept-game .site-tile-indicators{top:5px;bottom:auto}
 body.layout-basic #site-buy-board .site-tile-indicators>boon-product-indicator,
 body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicator{
   position:relative;inset:auto;flex:none;width:clamp(20px,1.8vw,28px);height:clamp(20px,1.8vw,28px);

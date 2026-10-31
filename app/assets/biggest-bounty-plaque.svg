@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" fill="none">
+  <defs>
+    <linearGradient id="surface" x1="600" y1="10" x2="600" y2="390" gradientUnits="userSpaceOnUse"><stop stop-color="#20211f"/><stop offset="1" stop-color="#171817"/></linearGradient>
+  </defs>
+  <path d="M78 9H1126Q1146 36 1188 43V327Q1153 337 1135 389H72Q57 351 13 329V78Q30 64 40 43Q64 36 78 9Z" fill="url(#surface)" stroke="#998349" stroke-width="5"/>
+  <path d="M85 20H1121Q1142 47 1177 53V320Q1145 333 1128 378H79Q62 343 25 321V83Q41 68 49 53Q74 44 85 20Z" stroke="#773c3b" stroke-width="3"/>
+  <path d="M318 20V378" stroke="#9b824d" stroke-width="2"/>
+  <path d="M325 20V378" stroke="#733b37" stroke-width="2"/>
+</svg>

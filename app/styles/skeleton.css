@@ -122,10 +122,10 @@ body.layout-basic .jackpot-hero > app-decimator-panel { min-height: 300px; }
   body.layout-basic .jackpot-hero > app-decimator-panel { min-height: 470px; }
 }
 
-/* The level-pool strip above the hero mounts late and pushed the hero down
-   ~46px on mobile. Same reservation idea as the hero blocks above. */
-app-pool-progress { display: block; min-height: 34px; }
-@media (max-width: 640px) { app-pool-progress { min-height: 45px; } }
+/* Reserve the complete pool strip before upgrade or chain data arrives.
+   Purchase, turbo, and jackpot views share this same footprint in app.css. */
+app-pool-progress { --pool-progress-height: 5.25rem; display: block; min-height: var(--pool-progress-height); }
+@media (max-width: 560px) { app-pool-progress { --pool-progress-height: 6.5rem; } }
 
 /* The nav grows when the jackpot clock hydrates (one row -> wrapped rows on
    mobile). Scoped to the app page body class so other pages' navs are

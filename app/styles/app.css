@@ -1,4 +1,4 @@
-@import url("./dgn-pop.css?v=currency-auto-20261025");
+@import url("./dgn-pop.css?v=centered-seams-20261029");
 @import url("./panel-popups.css?v=history-labels-20261009");
 @import url("./secondary-tools.css?v=fixed-referral-row-20260928");
 @import url("./lightweight.css?v=idle-rendering-20261008");
@@ -11526,7 +11526,13 @@ body.layout-basic main > app-eth-onramp {
 }
 
 body.layout-basic .pool-progress {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  box-sizing: border-box;
+  min-height: var(--pool-progress-height, 5.25rem);
   padding: 0.48rem clamp(0.62rem, 1.8vw, 0.9rem) 0.54rem;
 }
 
@@ -11636,6 +11642,7 @@ body.layout-basic .pool-progress__head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 1rem;
   align-items: center;
   gap: 0.6rem;
   /* The phase and live amount share the first visual row; the bar is row two. */
@@ -11717,6 +11724,8 @@ body.layout-basic .pool-progress__body {
   min-width: 0;
   align-items: center;
   column-gap: clamp(0.48rem, 1.5vw, 0.8rem);
+  /* Keep the thermometer at the same height when the turbo readout arrives. */
+  padding-bottom: 1.5rem;
 }
 
 body.layout-basic .pool-progress__name {
@@ -11902,11 +11911,7 @@ body.layout-basic .pool-progress__marker-label strong {
   font-weight: 950;
 }
 
-/* The turbo headline owns the header. Give the live pool readout a separate
-   lane below its marker so it cannot run through the countdown or prize. */
-body.layout-basic .pool-progress:has(.pool-progress__turbo-jackpot:not([hidden])) .pool-progress__body {
-  padding-bottom: 1.5rem;
-}
+/* The turbo headline owns the header; its readout uses the reserved lane below. */
 body.layout-basic .pool-progress:has(.pool-progress__turbo-jackpot:not([hidden])) .pool-progress__marker-label {
   top: calc(100% + 0.4rem);
   bottom: auto;
@@ -12127,6 +12132,7 @@ body.layout-basic .pool-progress__track.is-depleting .pool-progress__fill {
 }
 
 @media (max-width: 560px) {
+  body.layout-basic .pool-progress { min-height: var(--pool-progress-height, 6.5rem); }
   body.layout-basic .pool-progress__turbo-jackpot {
     display: grid;
     grid-template-columns: auto auto;
@@ -12152,6 +12158,7 @@ body.layout-basic .pool-progress__track.is-depleting .pool-progress__fill {
   }
   body.layout-basic .pool-progress__head {
     grid-template-columns: minmax(0, 1fr);
+    min-height: 2.4rem;
     justify-items: center;
     gap: 0.36rem;
   }
@@ -19161,6 +19168,9 @@ body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:not
   box-shadow: inset 0 1px #ffffff12;
 }
 body.layout-basic .play-grid .deg-block--wager .deg-place-cta::before { content: none; }
+body.layout-basic .deg-selection-reward { margin: .4rem 0 0; padding: .45rem .6rem; border: 1px solid #8970b555; border-radius: 6px; background: #282033; color: #e0c5ff; font: 700 .7rem/1.4 Inter, sans-serif; overflow-wrap: anywhere; }
+body.layout-basic .deg-selection-reward[data-bind="deg-quest-reward"] { border-color: #426a63; background: #142d27; color: #b9f6d1; }
+body.layout-basic .deg-selection-reward[hidden] { display: none; }
 body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:hover:not(:disabled) { filter: brightness(1.12); transform: none; }
 body.layout-basic .play-grid .deg-block--wager[data-currency] .deg-place-cta:active:not(:disabled) { filter: brightness(.95); transform: none; box-shadow: none; }
 body.layout-basic .play-grid .deg-block--wager .deg-place-cta:disabled { border-color: #ffffff0f; background: #29222f; color: #a59aad; opacity: 1; box-shadow: none; }
@@ -25849,6 +25859,29 @@ body.layout-basic .craps-entry__random-stack {
   }
 }
 
+/* Winner identities use the row's spare width, and long names remain readable. */
+body.layout-basic :is(.craps-entry__result-grid, .craps-entry__results-head-grid) {
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, .65fr) minmax(0, .72fr) minmax(0, .7fr) 1.02rem;
+}
+body.layout-basic .craps-entry__result-grid > span:first-child > strong {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  min-width: 0;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  font-size: clamp(.6rem, 1.65cqi, 1rem);
+  line-height: 1.2;
+}
+body.layout-basic .craps-entry__winner-pfp {
+  flex: none;
+  width: clamp(1.25rem, 3.6cqi, 2.2rem);
+  height: clamp(1.25rem, 3.6cqi, 2.2rem);
+  margin: 0;
+}
+
 /* The Peak multiplier carries the selected winner's goal, RIU or record outcome. */
 body.layout-basic .craps-entry__result-peak { justify-items: end; text-align: right; }
 body.layout-basic .craps-entry__result-peak strong { color: #8b949e; }
@@ -25894,3 +25927,38 @@ body.layout-basic .craps-entry__action > button[hidden] {
 
 body.layout-basic .session-status { margin: .5rem auto; padding: .45rem .75rem; max-width: 70rem; text-align: center; color: var(--text-secondary); font-size: .75rem; }
 body.layout-basic .session-status[hidden] { display: none; }
+
+/* Action feedback never adds a row or changes a control's dimensions. Native
+   popovers escape clipped rails and dialogs; click outside or Escape dismisses. */
+body.layout-basic .action-feedback[popover]:not([hidden]) {
+  position: fixed;
+  inset: auto 0 calc(1rem + env(safe-area-inset-bottom));
+  z-index: 2000;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: min(36rem, calc(100vw - 2rem));
+  max-height: 35dvh;
+  margin: 0 auto;
+  padding: .65rem .9rem;
+  overflow: auto;
+  border: 1px solid #b98767;
+  border-radius: 8px;
+  background: #2c1d20;
+  box-shadow: 0 .35rem 1.25rem #0008;
+  color: #ffe1c6;
+  font: 600 .8rem/1.4 "Inter", system-ui, sans-serif;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  transform: none;
+}
+body.layout-basic .action-feedback[hidden] { display: none !important; }
+@media (min-width: 1100px) {
+  body.layout-basic[data-desktop-page] .action-feedback[popover]:not([hidden]) {
+    bottom: calc(var(--info-rail-height, 0px) + 1rem);
+  }
+}

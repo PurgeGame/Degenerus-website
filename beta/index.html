@@ -74,20 +74,20 @@
   <link rel="stylesheet" href="/app/styles/panels.css">
   <link rel="stylesheet" href="/app/styles/buttons.css">
   <link rel="stylesheet" href="/app/styles/status-bar.css">
-  <link rel="stylesheet" href="/app/styles/skeleton.css">
+  <link rel="stylesheet" href="/app/styles/skeleton.css?v=stable-pool-height-20261028">
   <link rel="stylesheet" href="/app/styles/forms.css">
   <link rel="stylesheet" href="/app/styles/tx-status.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/jackpot.css">
   <link rel="stylesheet" href="/app/styles/viewer.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/replay.css?v=touch-layers-20261015" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/boons.css" media="print" data-deferred-css>
-  <link rel="stylesheet" href="/app/styles/app.min.css?v=quest-symbol-picker-20261026">
+  <link rel="stylesheet" href="/app/styles/app.min.css?v=centered-seams-20261029">
   <link rel="stylesheet" data-href="/app/styles/link-donation.css" data-rev="incinerator-slider-20261004">
   <link rel="stylesheet" data-href="/app/styles/sdgnrs-burn-rail.css" data-rev="larger-flames-20261002">
   <link rel="stylesheet" data-href="/app/styles/sacrifices.css">
   <link rel="stylesheet" href="/app/styles/coinflip-chipset.css?v=number-privacy-20261006">
   <link rel="stylesheet" href="/app/styles/daily-drawing.css?v=idle-rendering-20261008">
-  <link rel="stylesheet" href="/app/styles/degenesis-hub.css?v=ticket-flip-toggle-20261029">
+  <link rel="stylesheet" href="/app/styles/degenesis-hub.css?v=centered-ticket-badges-20261030">
   <link rel="stylesheet" href="/app/styles/degenesis-reveal.css?v=purchase-polish-20261027">
   <link rel="stylesheet" href="/app/styles/afking-subscription.css?v=pass-tickets-20261028">
   <link rel="stylesheet" data-href="/app/styles/deity-pass-purchase.css?v=mining-bonus-20261003">
@@ -97,7 +97,7 @@
   <link rel="stylesheet" href="/app/styles/eth-onramp.css" media="print" data-deferred-css>
   <link rel="stylesheet" data-href="/app/styles/craps-table.css" data-rev="winner-summary-20261028">
   <link rel="stylesheet" data-href="/app/styles/baf-eve.css">
-  <link rel="stylesheet" data-href="/app/styles/records-rail.css" data-rev="bounties-fast-load-20261028">
+  <link rel="stylesheet" data-href="/app/styles/records-rail.css" data-rev="bounty-card-fit-20261028">
   <link rel="stylesheet" data-href="/app/styles/baf-resolution.css">
   <link rel="stylesheet" href="/app/styles/jackpot-processing.css" media="print" data-deferred-css>
   <link rel="stylesheet" href="/app/styles/status-indicators.css?v=quest-overflow-20261006">
@@ -110,7 +110,7 @@
   <!-- Phone section pager + bottom dock. Blocking: it hides inactive pages
        and styles the static dock markup at first paint. -->
   <link rel="stylesheet" href="/app/styles/mobile-pager.css?v=mobile-pass-checkout-20261028">
-  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=decimator-replay-20261028">
+  <link rel="stylesheet" href="/app/styles/desktop-sections.css?v=single-pass-20261029">
   <link rel="stylesheet" href="/app/styles/token-tools.css?v=hub-spending-20261029">
   <!-- Browser npm deps are VENDORED into /app/vendor/ (db/vendor-modules.sh).
        They used to load from esm.sh, a free public CDN, which put a third party
@@ -134,7 +134,14 @@
       "/app/app/whale-pass-claims.js": "/app/app/whale-pass-claims.js?v=whale-pass-decimals-20261028",
       "/app/app/whale-pass-format.js": "/app/app/whale-pass-format.js?v=whale-pass-decimals-20261028",
       "/app/app/jackpot-reveal-preparation.js": "/app/app/jackpot-reveal-preparation.js?v=decimator-replay-20261028",
-      "/app/app/degenesis-results.js": "/app/app/degenesis-results.js?v=afking-pending-20261028",
+      "/app/app/degenesis-results.js": "/app/app/degenesis-results.js?v=current-cohorts-20261029",
+      "/app/app/contracts.js": "/app/app/contracts.js?v=snappy-mobile-20261028",
+      "/app/app/wallet-transaction.js": "/app/app/wallet-transaction.js?v=snappy-mobile-20261028",
+      "/app/app/transaction-gas.js": "/app/app/transaction-gas.js?v=snappy-mobile-20261028",
+      "/app/app/read-provider.js": "/app/app/read-provider.js?v=snappy-mobile-20261028",
+      "/app/app/rpc-transport.js": "/app/app/rpc-transport.js?v=snappy-mobile-20261028",
+      "/app/app/purchase-info.js": "/app/app/purchase-info.js?v=snappy-mobile-20261028",
+      "/app/app/mobile-pager.js": "/app/app/mobile-pager.js?v=snappy-mobile-20261028",
       "/app/chain/state.js": "/app/chain/state.js?v=saved-page-20261028",
       "/app/app/polling.js": "/app/app/polling.js?v=saved-page-20261028",
       "/app/app/jackpot-cache.js": "/app/app/jackpot-cache.js?v=jackpot-cache-handoff-20261029",
@@ -147,12 +154,12 @@
       "/app/app/boons.js": "/app/app/boons.js?v=degenerette-cards-20261003",
       "/app/app/dgn-traits.js": "/app/app/dgn-traits.js?v=wild-ring-20261008",
       "/app/app/badge-sprite.js": "/app/app/badge-sprite.js?v=fixed-neon-wild-20261010",
-      "/app/app/lootbox.js": "/app/app/lootbox.js?v=foil-guard-20261008",
-      "/app/app/degenerette.js": "/app/app/degenerette.js?v=stake-units-20261008",
+      "/app/app/lootbox.js": "/app/app/lootbox.js?v=snappy-mobile-20261028",
+      "/app/app/degenerette.js": "/app/app/degenerette.js?v=snappy-mobile-20261028",
       "/app/chain/boards.js": "/app/chain/boards.js?v=bounties-fast-load-20261028",
       "/app/app/records.js": "/app/app/records.js?v=saved-page-20261028",
       "/app/app/dgn-reels.js": "/app/app/dgn-reels.js?v=degenerette-cards-20261003",
-      "/app/components/app-records-rail.js": "/app/components/app-records-rail.js?v=saved-page-20261028",
+      "/app/components/app-records-rail.js": "/app/components/app-records-rail.js?v=bounty-card-fit-20261028",
       "/app/components/app-box-strip.js": "/app/components/app-box-strip.js?v=pending-deployment-scope-20261001",
       "/app/app/bingo-watch.js": "/app/app/bingo-watch.js?v=pending-recent-receipts-20261001",
       "/app/components/app-sdgnrs-redemptions.js": "/app/components/app-sdgnrs-redemptions.js?v=pending-deployment-scope-20261001",
@@ -174,7 +181,7 @@
       "/app/chain/craps-results.js": "/app/chain/craps-results.js?v=actual-bankroll-peak-20261001",
       "/app/chain/viewer.js": "/app/chain/viewer.js?v=day-summary-craps-20260930",
       "/app/components/last-day-jackpot.js": "/app/components/last-day-jackpot.js?v=jackpot-cache-handoff-20261029",
-      "/app/components/app-craps-entry.js": "/app/components/app-craps-entry.js?v=adaptive-games-20261028",
+      "/app/components/app-craps-entry.js": "/app/components/app-craps-entry.js?v=rng-reservations-20261028",
       "/app/components/app-craps-rules.js": "/app/components/app-craps-rules.js?v=main-event-20260929",
       "/app/components/app-tickets-inventory.js": "/app/components/app-tickets-inventory.js?v=saved-page-20261028",
       "/app/components/app-transaction-history.js": "/app/components/app-transaction-history.js?v=whale-pass-decimals-20261028",
@@ -190,11 +197,14 @@
       "lean-qr": "/app/vendor/lean-qr.mjs",
       "/app/components/gold-rush-headline.js": "/app/components/gold-rush-headline.js?v=tutorial-fixtures-13",
       "/app/components/app-pool-progress.js": "/app/components/app-pool-progress.js?v=decimator-battle-20260930",
-      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=ticket-popup-only-20261028",
+      "/app/app/day-rollover.js": "/app/app/day-rollover.js?v=rng-reservations-20261028",
+      "/app/app/action-feedback.js": "/app/app/action-feedback.js?v=stable-action-feedback-20261028",
+      "/app/components/app-decimator-burn.js": "/app/components/app-decimator-burn.js?v=stable-action-feedback-20261028",
+      "/app/components/app-decimator-panel.js": "/app/components/app-decimator-panel.js?v=all-in-cards-20261029",
       "/app/components/app-token-funds.js": "/app/components/app-token-funds.js?v=hub-spending-20261029",
       "/app/components/app-daily-flip.js": "/app/components/app-daily-flip.js?v=jackpot-cache-handoff-20261029",
       "/app/components/app-sacrifice-panel.js": "/app/components/app-sacrifice-panel.js?v=boon-tooltip-fit-20261001",
-      "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=referral-bounty-fit-20261028",
+      "/app/components/app-degenerette-panel.js": "/app/components/app-degenerette-panel.js?v=stable-action-feedback-20261028",
       "/app/components/app-deity-desk.js": "/app/components/app-deity-desk.js?v=saved-page-20261028",
       "/app/components/deity-art-editor.js": "/app/components/deity-art-editor.js?v=deity-logo-ring-20260929",
       "/app/app/deity-customization.js": "/app/app/deity-customization.js?v=deity-deployment-20260930",
@@ -203,8 +213,8 @@
       "/app/app/deity-symbol.js": "/app/app/deity-symbol.js?v=deity-picker-clean-20260930",
       "/app/app/desktop-info-rail.js": "/app/app/desktop-info-rail.js?v=afking-pending-20261028",
       "/app/app/passes.js": "/app/app/passes.js?v=mobile-pass-checkout-20261028",
-      "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=pass-copy-20261028",
-      "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=bottom-bar-polish-20261028",
+      "/app/components/app-pass-section.js": "/app/components/app-pass-section.js?v=funding-balance-20261029",
+      "/app/components/app-wwxrp-burn.js": "/app/components/app-wwxrp-burn.js?v=stable-action-feedback-20261028",
       "/app/components/app-parimutuel-panel.js": "/app/components/app-parimutuel-panel.js?v=quest-growth-slot-20261027",
       "/app/components/app-quest-panel.js": "/app/components/app-quest-panel.js?v=quest-wild-defaults-20261029",
       "/app/components/app-reveal-tray.js": "/app/components/app-reveal-tray.js?v=afking-pending-20261028",
@@ -213,12 +223,12 @@
       "/app/craps/replay-adapter.js": "/app/craps/replay-adapter.js?v=craps-31ca6fdd-p7a-v6-final-ranks-20261010",
       "/app/app/coin-draw-centre.js": "/app/app/coin-draw-centre.js?v=craps-battle-outcome-20261004",
       "/app/chain/jackpots.js": "/app/chain/jackpots.js?v=jackpot-cache-handoff-20261029",
-      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=purchase-polish-20261027",
+      "/app/components/reveal-overlay.js": "/app/components/reveal-overlay.js?v=currency-visual-20261029",
       "/app/app/jackpot-buckets.js": "/app/app/jackpot-buckets.js?v=decimator-entries-20261006",
       "/app/app/day-summary-prizes.js": "/app/app/day-summary-prizes.js?v=decimator-entries-20261006",
       "/app/components/replay-panel.js": "/app/components/replay-panel.js?v=jackpot-cache-handoff-20261029",
-      "/app/components/app-craps-table.js": "/app/components/app-craps-table.js?rev=winner-summary-20261028",
-      "/app/components/app-craps-table.js?rev=winnings-delivery-20261027": "/app/components/app-craps-table.js?rev=winner-summary-20261028",
+      "/app/components/app-craps-table.js": "/app/components/app-craps-table.js?rev=checkpoint-winner-20261029",
+      "/app/components/app-craps-table.js?rev=winnings-delivery-20261027": "/app/components/app-craps-table.js?rev=checkpoint-winner-20261029",
       "/app/components/app-decimator-battle.js": "/app/components/app-decimator-battle.js?v=decimator-replay-20261028",
       "/app/craps/decimator-table.js": "/app/craps/decimator-table.js?v=decimator-cutoff-20261006",
       "/app/craps/decimator-skin.js": "/app/craps/decimator-skin.js?v=whale-pass-decimals-20261028",
@@ -764,7 +774,7 @@
     }
   </script>
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
-  <script type="module" src="/app/app/mobile-pager.js"></script>
+  <script type="module" src="/app/app/mobile-pager.js?v=snappy-mobile-20261028"></script>
   <script type="module" src="/app/app/desktop-sections.js?v=adaptive-games-20261028"></script>
   <script type="module" src="/app/app/desktop-info-rail.js?v=afking-pending-20261028"></script>
   <script type="module" src="/app/app/main.js?v=loading-baf-20261027"></script>
@@ -937,6 +947,15 @@
       : '';
     const styleLoads = new Map();
     const moduleLoads = new Map();
+    const modulePreloads = new Set();
+    const preloadModule = (src) => {
+      if (modulePreloads.has(src)) return;
+      modulePreloads.add(src);
+      const link = document.createElement('link');
+      link.rel = 'modulepreload';
+      link.href = moduleRevision ? `${src}${moduleRevision}` : import.meta.resolve(src);
+      document.head.appendChild(link);
+    };
     const retryRevision = Date.now().toString(36);
     const loadStyle = (href) => {
       if (styleLoads.has(href)) return styleLoads.get(href);
@@ -953,6 +972,9 @@
     };
     const importModule = (src) => {
       if (moduleLoads.has(src)) return moduleLoads.get(src);
+      // Fetch/parse code alongside its stylesheet, then upgrade only when the
+      // CSS is ready. Hidden panels do not execute or start their data polls.
+      preloadModule(src);
       const loaded = (async () => {
         await Promise.all((MODULE_STYLES.get(src) || []).map(loadStyle));
         for (let attempt = 0; attempt < 3; attempt += 1) {

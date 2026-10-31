@@ -317,6 +317,11 @@ body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-step {
 /* Visual order builders                                               */
 /* ------------------------------------------------------------------ */
 
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > [data-bind="dec-purchase-quest-effect"] {
+  grid-row: 4;
+  color: #b9f6d1;
+}
+
 body.layout-basic .app-decimator-panel .dec-purchase-builders {
   display: grid;
   flex: 0 0 auto;

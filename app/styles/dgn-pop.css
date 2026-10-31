@@ -1,5 +1,5 @@
 @import url("./bubble-reveal.css?v=touch-layers-20261015");
-@import url("./dgn-winnings.css?v=currency-auto-20261025");
+@import url("./dgn-winnings.css?v=currency-well-20261029");
 .rvl-dgn-playback-toggle {
   min-height: 44px; padding: 9px 18px; border: 1px solid #c1ab7280;
   border-radius: 8px; background: #252c27; color: #f1dfac;
@@ -27,6 +27,12 @@
 .dgn-pop__grid[data-size="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 620px; }
 .dgn-pop__card { min-width: 0; }
 .dgn-pop__ticket { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); aspect-ratio: 1; gap: 2px; padding: 2px; overflow: hidden; border: 1px solid #a5b4ad; border-radius: 18px; background: var(--pop-line); box-shadow: 0 8px 18px #0005; container-type: inline-size; }
+/* One symmetric seam above the four raised covers, using the flame's center.
+   Separate directional bevels otherwise make the two halves look misaligned. */
+.dgn-pop__ticket::before,
+.dgn-pop__ticket::after { content: ''; position: absolute; z-index: 10; background: #d5e3e4; box-shadow: 0 0 0 1px #62777a; pointer-events: none; }
+.dgn-pop__ticket::before { top: 2px; bottom: 2px; left: 50%; width: 2px; transform: translateX(-50%); }
+.dgn-pop__ticket::after { left: 2px; right: 2px; top: 50%; height: 2px; transform: translateY(-50%); }
 .dgn-pop__cell { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: radial-gradient(ellipse at 40% 28%, #f3f2e9, #d2d9cf 75%); box-shadow: inset 0 2px 3px #fff9, inset 0 -4px 7px #1b2c3544; cursor: pointer; touch-action: manipulation; transition: background-color .15s, box-shadow .15s; }
 .dgn-pop__cell:not(.is-open):hover { filter: brightness(1.05); }
 .dgn-pop__cell:not(.is-open):active { box-shadow: inset 0 3px 12px #243a4270; }

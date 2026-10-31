@@ -393,6 +393,46 @@ body.layout-basic .qst-purchase-prices strong { display: grid; grid-template-col
 body.layout-basic .qst-purchase-price__unit { color: #cbb98f; font-size: .65rem; }
 body.layout-basic .qst-action-dialog__card[data-purchase="true"] { width: min(94vw, 36rem); gap: .5rem; padding: .7rem; }
 body.layout-basic .qst-action-dialog__card[data-purchase="true"] .qst-action-requirement { display: none; }
+
+/* Direct battle entry inside the Craps quest sheet. */
+body.layout-basic .qst-craps-battles { display: grid; gap: .4rem; }
+body.layout-basic .qst-craps-battles[hidden],
+body.layout-basic .qst-craps-battle[hidden],
+body.layout-basic .qst-action-confirm[hidden],
+body.layout-basic .qst-action-requirement[hidden] { display: none; }
+body.layout-basic .qst-craps-battle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .65rem;
+  padding: .65rem;
+  border: 1px solid rgba(var(--qst-dialog-rgb), .28);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .2);
+}
+body.layout-basic .qst-craps-battle > span { display: grid; gap: .2rem; min-width: 0; }
+body.layout-basic .qst-craps-battle strong { color: #fff4d6; font-size: .9rem; }
+body.layout-basic .qst-craps-battle small,
+body.layout-basic .qst-craps-empty { color: #b5b7c9; font-size: .75rem; line-height: 1.4; }
+body.layout-basic .qst-craps-battle button {
+  min-height: 44px;
+  padding: .5rem .65rem;
+  border: 1px solid rgba(var(--qst-dialog-rgb), .6);
+  border-radius: 8px;
+  color: var(--qst-dialog-button-ink);
+  background: linear-gradient(var(--qst-dialog-button-start), var(--qst-dialog-button-end));
+  font-family: inherit;
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1.3;
+  cursor: pointer;
+}
+body.layout-basic .qst-craps-battle button:disabled { opacity: .5; cursor: default; }
+body.layout-basic .qst-craps-battle button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+@media (max-width: 380px) {
+  body.layout-basic .qst-craps-battle { gap: .4rem; padding: .5rem; }
+  body.layout-basic .qst-craps-battle button { max-width: 9rem; }
+}
 @media (max-width: 420px) {
   body.layout-basic .qst-purchase-prices { font-size: .8rem; }
   body.layout-basic .qst-purchase-prices strong { gap: .18rem; }

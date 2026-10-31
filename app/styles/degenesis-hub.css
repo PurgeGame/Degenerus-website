@@ -319,6 +319,8 @@ body.layout-basic .dgx-dialog .dgx-shelf--tickets:has([data-dgx-piece="foil"]) .
 body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece > .dec-ticket-piece__art { inset: var(--dgx-quote-height) .08rem .08rem; container-type: size; }
 body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-foil-limit-stamp { top: calc(var(--dgx-quote-height) + .12rem); }
 body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art > :is(.dec-entry-face, .dec-ticket-face) { width: min(100cqw, 100cqh); height: auto; max-height: 100%; }
+/* The popup's larger ticket has room to center each badge in its quadrant. */
+body.layout-basic .dgx-dialog .app-decimator-panel.dgx-shelf--tickets .dec-ticket-face > .dec-ticket-trait img { top: 50%; }
 body.layout-basic .dgx-dialog .dgx-shelf--tickets .dec-ticket-piece__art > :is(.dec-pack-face, .dec-foil-pack-face) { width: min(92cqw, 72cqh); height: auto; max-height: 100%; }
 body.layout-basic .dgx-dialog .dgx-shelf .dec-ticket-piece--foil.is-selected {
   border-color: rgba(253, 230, 138, 0.95);
@@ -512,3 +514,6 @@ body.layout-basic .dgx-dialog :is(.dgx-bonus, .dgx-boon-chance) > small { font: 
 body.layout-basic .dgx-dialog :is(.dgx-bonus, .dgx-boon-chance) > strong { font: 800 .95rem/1.3 'Roboto Mono', monospace; text-align: right; }
 body.layout-basic .dgx-dialog .dgx-boon-chance { border-color: #685074; background: #2b1c33; color: #e4c6f6; }
 body.layout-basic .dgx-dialog :is(.dgx-bonus, .dgx-boon-chance)[hidden] { display: none; }
+body.layout-basic .dgx-dialog .dgx-reward { margin: 0; padding: .6rem .8rem; border: 1px solid #8970b555; border-radius: 8px; background: #282033; color: #e0c5ff; font: 700 .75rem/1.5 Inter, sans-serif; overflow-wrap: anywhere; }
+body.layout-basic .dgx-dialog .dgx-reward--quest { border-color: #426a63; background: #142d27; color: #b9f6d1; }
+body.layout-basic .dgx-dialog .dgx-reward[hidden] { display: none; }

@@ -283,13 +283,13 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .records-rail__wordmark { width: 100%; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__wordmark img { max-height: 100%; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders {
-    display: grid; grid-area: leaders; height: 100%; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch;
+    display: grid; grid-area: leaders; height: 100%; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center;
   }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders > *,
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leaders > :last-child:nth-child(odd) {
     grid-column: auto; width: 100%;
   }
-  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader { container: records-leader / inline-size; height: 100%; aspect-ratio: auto; }
+  body.layout-basic[data-desktop-page] .info-rail .records-rail__leader { container: records-leader / inline-size; height: auto; aspect-ratio: 1200 / 400; }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title > span { font-size: min(1rem, 7cqw); }
   body.layout-basic[data-desktop-page] .info-rail .records-rail__leader-title > strong { font-size: min(.75rem, 5.5cqw); }
   body.layout-basic[data-desktop-page] .info-rail .app-tickets-inventory { flex: none; width: 100%; }
@@ -359,7 +359,6 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail .dbb__burn span { font-size: .9rem; }
   body.layout-basic[data-desktop-page] .info-rail .dbb__burn strong { font-size: .7rem; }
   body.layout-basic[data-desktop-page] .info-rail .dbb__burn strong.has-boon { font-size: .6rem; }
-  body.layout-basic[data-desktop-page] .info-rail .dbb:has(.dbb__feedback:not([hidden])) { --dbb-control-height: 3.5rem; }
   body.layout-basic[data-desktop-page] .info-rail .dbb__feedback { font-size: .65rem; }
   body.layout-basic[data-desktop-page] .info-rail .dbb__average b { font-size: .75rem; }
 }
@@ -407,6 +406,7 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   /* Pass tickets use the full bar width, with the same height as every slide. */
   body.layout-basic[data-desktop-page] .info-afking .pass-shop { width: 100%; height: 100%; min-width: 0; padding: .15rem .35rem; box-sizing: border-box; }
   body.layout-basic[data-desktop-page] .pass-shop__offers { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) clamp(15.75rem, 29%, 27rem); gap: .5rem; width: 100%; height: 100%; align-items: stretch; }
+  body.layout-basic[data-desktop-page] .pass-shop__offers:not(:has(> .pass-shop__subscription:not([hidden]))) { grid-template-columns: 4.5rem minmax(0, 1fr); }
   body.layout-basic[data-desktop-page] .pass-shop__catalog { container: pass-catalog / inline-size; display: grid; grid-template-rows: minmax(0, 1fr) 12px; gap: 3px; min-width: 0; min-height: 0; }
   body.layout-basic[data-desktop-page] .pass-shop__purchases { display: grid; grid-auto-rows: minmax(0, 1fr); gap: 3px; min-width: 0; min-height: 0; }
   body.layout-basic[data-desktop-page] .pass-shop__offer,
@@ -452,6 +452,30 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .pass-shop__catalog:not(:has(.pass-shop__offer--lazy:not([hidden])):has(.pass-shop__offer--deity:not([hidden]))) .pass-shop__product b { font-size: 1rem; }
   body.layout-basic[data-desktop-page] .pass-shop__catalog:not(:has(.pass-shop__offer--lazy:not([hidden])):has(.pass-shop__offer--deity:not([hidden]))) .pass-shop__perks { font-size: .68rem; }
   body.layout-basic[data-desktop-page] .pass-shop__quantity input::-webkit-inner-spin-button { appearance: none; }
+  /* A lone Whale ticket has room for a price block and a readable benefits grid. */
+  body.layout-basic[data-desktop-page] .pass-shop__catalog .pass-shop__purchases:not(:has(> .pass-shop__offer:not([hidden]))) {
+    & .pass-shop__whale { grid-template-columns: minmax(0, 1fr) 4.5rem; gap: .5rem; padding-right: .7rem; }
+    & .pass-shop__whale .pass-shop__offer { grid-template-columns: 10rem minmax(0, 1fr); gap: 1rem; }
+    & .pass-shop__whale .pass-shop__product { grid-template-columns: 2.5rem minmax(0, 1fr); gap: .35rem .6rem; padding-inline: .7rem; }
+    & .pass-shop__whale .pass-shop__seal { width: 2.5rem; height: 2.5rem; font-size: .85rem; }
+    & .pass-shop__whale .pass-shop__product strong { font-size: .8rem; letter-spacing: .07em; }
+    & .pass-shop__whale .pass-shop__product b { font-size: 1.25rem; }
+    & .pass-shop__whale .pass-shop__perks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; gap: .4rem .6rem; font-size: .75rem; line-height: 1.15; }
+    & .pass-shop__perks > span::before { content: none; }
+    & .pass-shop__bulk { grid-column: 1 / -1; justify-self: start; padding: .2rem .5rem; border: 1px solid #d1b0694d; border-radius: 4px; background: #d1b06912; font-size: .65rem; letter-spacing: .03em; }
+    & .pass-shop__quantity { height: 32px; grid-template-columns: 1.2rem minmax(0, 1fr) 1.2rem; }
+    & .pass-shop__quantity :is(button, input) { height: 30px; }
+    & .pass-shop__quantity input { font-size: .75rem; }
+    @container pass-catalog (max-width: 800px) {
+      & .pass-shop__whale { grid-template-columns: minmax(0, 1fr) 3.7rem; gap: .3rem; padding-right: .4rem; }
+      & .pass-shop__whale .pass-shop__offer { grid-template-columns: 7.8rem minmax(0, 1fr); gap: .55rem; }
+      & .pass-shop__whale .pass-shop__product { grid-template-columns: 1.8rem minmax(0, 1fr); gap: .3rem; padding-inline: .4rem; }
+      & .pass-shop__whale .pass-shop__seal { width: 1.8rem; height: 1.8rem; font-size: .68rem; }
+      & .pass-shop__whale .pass-shop__product b { font-size: 1rem; }
+      & .pass-shop__whale .pass-shop__perks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .45rem; font-size: .65rem; }
+      & .pass-shop__bulk { font-size: .6rem; padding-block: .1rem; }
+    }
+  }
   body.layout-basic[data-desktop-page] .pass-shop__subscription { min-width: 0; min-height: 0; height: 100%; }
   body.layout-basic[data-desktop-page] .pass-shop [hidden] { display: none !important; }
   /* The bar shows the account; editing and deposits open their own dialog. */
@@ -793,7 +817,6 @@ body.layout-basic .inv-ticket-unit { font: 600 .58rem/1.1 Inter, sans-serif; let
   body.layout-basic[data-desktop-page] .info-rail :is(.rrt-tray, .rrt-actions) { --rrt-row-height: calc(var(--info-panel-height) - .75rem); }
   body.layout-basic[data-desktop-page] .info-rail .mobile-event-summary { min-height: 64px; padding: .4rem .8rem; }
   body.layout-basic[data-desktop-page] .info-rail .dbb { --dbb-control-height: 3.25rem; padding-block: .25rem; }
-  body.layout-basic[data-desktop-page] .info-rail .dbb:has(.dbb__feedback:not([hidden])) { --dbb-control-height: 2.75rem; }
   body.layout-basic[data-desktop-page] .info-rail .deity-desk { padding-block: .15rem; }
   body.layout-basic[data-desktop-page] .info-rail .deity-pass-lockup { --deity-badge-size: 2.25rem; }
   body.layout-basic[data-desktop-page] .info-rail .deity-desk__actions button { min-height: 62px; padding-block: .25rem; }

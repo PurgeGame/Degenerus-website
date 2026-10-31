@@ -1,11 +1,12 @@
 /* One compact bar under the cards: coin well, payout, and status keep
    this fixed footprint through every flip so the cards above never shift. */
 .dgn-winnings {
+  --dgn-winnings-column-gap: 12px;
   box-sizing: border-box; position: relative; z-index: 30;
   display: grid; grid-template-columns: 88px minmax(0, 1fr);
   grid-template-rows: auto auto auto;
   grid-template-areas: 'reward label' 'reward amount' 'reward status';
-  align-content: center; align-items: center; column-gap: 12px; row-gap: 1px;
+  align-content: center; align-items: center; column-gap: var(--dgn-winnings-column-gap); row-gap: 1px;
   width: 100%; max-width: 620px; height: 96px;
   margin: 8px auto 0; padding: 8px 16px 8px 9px; border: 1px solid #738a8180; border-radius: 14px;
   background: linear-gradient(145deg, #1a2b25, #0b1412); color: #f5f1dc;
@@ -45,19 +46,100 @@
 .dgn-winnings.is-currency { border-color: #d9bb68; }
 .dgn-winnings.is-currency .dgn-winnings__value { font-size: clamp(1.5rem, 5vw, 1.85rem); letter-spacing: .04em; }
 .dgn-winnings.is-currency .dgn-winnings__status { color: #ead394; font-size: .65rem; }
-/* Auto changes the hidden back face at the edge-on boundary, then lands on
-   the actual currency. Manual keeps its longer toss. */
-body.layout-basic .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-active {
+/* Replace the question mark in its existing grid cell. Currency selection
+   never adds a row or changes the payout bar's footprint. */
+.dgn-winnings.has-currency-options .dgn-winnings__amount { display: none; }
+.rvl-box-currency-options {
+  position: relative;
+  grid-area: amount; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px; min-width: 0; width: 100%; max-width: 300px; padding-block: 2px;
+}
+.rvl-box-currency-options::before {
+  content: ''; position: absolute; top: 19px;
+  left: calc(-1 * var(--dgn-winnings-column-gap)); right: calc((100% - 10px) / 6);
+  height: 2px; border-radius: 1px;
+  background: linear-gradient(90deg, #d9bb6880, #a8b8aa50);
+}
+.rvl-box-currency-option {
+  position: relative; display: grid; justify-items: center; align-content: start; gap: 3px;
+  box-sizing: border-box; min-width: 0; height: 48px; padding: 2px;
+  color: #edf1e5; font: 850 .6rem/1 system-ui; letter-spacing: .04em;
+  transition: opacity .12s ease;
+}
+.rvl-box-currency-option::before {
+  content: ''; position: absolute; top: 0; left: calc(50% - 18px);
+  width: 36px; height: 36px; box-sizing: border-box; border: 1px solid #a8b8aa55;
+  border-radius: 50%; background: #102019;
+}
+.rvl-box-currency-option img {
+  position: relative; width: 32px; height: 32px; object-fit: contain;
+}
+.rvl-box-currency-options:not(.is-settled) .rvl-box-currency-option::before {
+  animation: rvl-currency-seek var(--rvl-currency-scan-ms, 600ms) linear infinite;
+}
+.rvl-box-currency-option:nth-child(2)::before { animation-delay: calc(var(--rvl-currency-scan-ms, 600ms) / 3); }
+.rvl-box-currency-option:nth-child(3)::before { animation-delay: calc(var(--rvl-currency-scan-ms, 600ms) * 2 / 3); }
+.rvl-box-currency-options.is-settled .rvl-box-currency-option:not(.is-selected) { color: #edf1e538; }
+.rvl-box-currency-options.is-settled .rvl-box-currency-option:not(.is-selected) img { opacity: .22; }
+.rvl-box-currency-option.is-selected { color: #ffe7a5; }
+.rvl-box-currency-option.is-selected::before {
+  border: 2px solid #f4d578; background: #735a28;
+  box-shadow: 0 0 14px #f4d57880, 0 0 0 3px #f4d57820;
+}
+.rvl-box-currency-option.is-selected img {
+  animation: rvl-currency-lock-in var(--rvl-currency-scan-ms, 600ms) ease-out both;
+}
+@keyframes rvl-currency-seek {
+  0%, 28% { border-color: #f4d578; box-shadow: 0 0 9px #f4d57865; }
+  34%, 100% { border-color: #a8b8aa55; box-shadow: none; }
+}
+@keyframes rvl-currency-lock-in {
+  0% { transform: scale(.9); }
+  35% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.dgn-winnings.has-currency-options .dgn-winnings__status {
+  display: block; min-height: .65rem; font-size: .56rem; letter-spacing: .02em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rvl-box-currency-options .rvl-box-currency-option::before,
+  .rvl-box-currency-option.is-selected img { animation: none; }
+  .rvl-box-currency-option { transition: none; }
+}
+/* This small well has room for rotation, not the Daily Flip's high toss.
+   Keep the edge-on swap and landing angles while spinning in place. */
+body.layout-basic .dgn-winnings .rvl-box-currency-coin.df-coin3d__inner.df-reveal-active {
+  --df-track-animation: rvl-currency-well-track;
+  --df-track-easing: linear;
+  --df-ending-animation: rvl-currency-well-win;
+}
+body.layout-basic .dgn-winnings .rvl-box-currency-coin.df-coin3d__inner.df-reveal-ending--loss {
+  --df-ending-animation: rvl-currency-well-loss;
+}
+@keyframes rvl-currency-well-track {
+  from { transform: rotateX(0deg); }
+  to { transform: rotateX(2070deg); }
+}
+@keyframes rvl-currency-well-win {
+  from { transform: rotateX(2070deg); }
+  to { transform: rotateX(2340deg); }
+}
+@keyframes rvl-currency-well-loss {
+  from { transform: rotateX(2070deg); }
+  to { transform: rotateX(2160deg); }
+}
+/* Auto keeps its shorter rotation and the same truthful face swap. */
+body.layout-basic .dgn-winnings .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-active {
   --df-track-animation: rvl-currency-quick-track;
   --df-track-easing: linear;
   --df-ending-animation: rvl-currency-quick-win;
 }
-body.layout-basic .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-ending--loss {
+body.layout-basic .dgn-winnings .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-ending--loss {
   --df-ending-animation: rvl-currency-quick-loss;
 }
 @keyframes rvl-currency-quick-track {
   0% { transform: rotateX(0deg); }
-  50% { transform: translateY(-7px) rotateX(315deg); }
+  50% { transform: rotateX(315deg); }
   100% { transform: rotateX(630deg); }
 }
 @keyframes rvl-currency-quick-win {
@@ -79,9 +161,12 @@ body.layout-basic .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-endin
   grid-template-areas: none; grid-template-columns: 1fr; gap: 0;
 }
 .dgn-winnings :is(.rvl-survival, .rvl-box-currency-reveal)::before { display: none; }
+.dgn-winnings .rvl-box-currency-reveal:is(.is-flipping, .is-revealed) { animation: none; transform: none; }
 .dgn-winnings :is(.rvl-survival-arena, .rvl-box-currency-icon) { grid-area: auto; position: absolute; inset: 0; width: 100%; height: 100%; }
+.dgn-winnings .rvl-box-currency-icon:has(> .rvl-box-currency-coin),
+.dgn-winnings .rvl-box-currency-landed { filter: drop-shadow(0 2px 3px #0008); }
 .dgn-winnings .rvl-survival-coin-shell { width: 54px; height: 54px; }
-.dgn-winnings .rvl-box-currency-coin { width: 54px; height: 54px; }
+body.layout-basic .dgn-winnings .rvl-box-currency-coin { width: 54px; height: 54px; }
 .dgn-winnings .rvl-box-currency-landed { width: 54px; height: 54px; object-fit: contain; }
 .dgn-winnings .rvl-survival-result-mark { width: 17px; height: 17px; font-size: 12px; right: -2px; bottom: -2px; }
 .dgn-winnings .rvl-spin-total { font: 900 clamp(.95rem, 3.4vw, 1.3rem)/1.15 system-ui; letter-spacing: 0; animation: none; }
@@ -91,5 +176,5 @@ body.layout-basic .rvl-box-currency-coin--quick.df-coin3d__inner.df-reveal-endin
 .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { height: calc(100dvh - 1rem); justify-content: flex-start; }
 .rvl-stage--pop .rvl-dgn-actions--fixed { min-height: 44px; }
 @media (max-width: 380px) {
-  .dgn-winnings { column-gap: 9px; padding-inline: 8px 12px; }
+  .dgn-winnings { --dgn-winnings-column-gap: 9px; padding-inline: 8px 12px; }
 }
