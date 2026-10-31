@@ -21158,18 +21158,11 @@ body.layout-basic .df-charity-dialog__head h3 {
   text-align: left;
 }
 body.layout-basic .df-charity-dialog__mark {
-  display: grid;
+  display: block;
   width: 2.65rem;
   height: 2.65rem;
   flex: 0 0 2.65rem;
-  place-items: center;
-  border: 1px solid rgba(216, 180, 254, 0.7);
-  border-radius: 50%;
-  background: linear-gradient(145deg, #c084fc, #7c3aed 72%);
-  color: #fff;
-  font-size: 1.25rem;
-  line-height: 1;
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  object-fit: contain;
 }
 body.layout-basic .df-charity-dialog__eyebrow {
   display: block;

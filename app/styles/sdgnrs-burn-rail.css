@@ -250,10 +250,10 @@ body.layout-basic .sdgnrs-rail__vote {
     0 4px 12px rgba(62, 27, 97, 0.34);
 }
 
-body.layout-basic .sdgnrs-rail__vote > span {
-  color: #f0d8ff;
-  font-size: 0.76rem;
-  text-shadow: 0 0 7px rgba(224, 183, 255, 0.62);
+body.layout-basic .sdgnrs-rail__vote-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 body.layout-basic .sdgnrs-rail__vote-label {
@@ -411,7 +411,6 @@ body.layout-basic .df-burn-dialog__asset button:disabled {
     font-size: 0.56rem;
     letter-spacing: 0.07em;
   }
-  body.layout-basic .sdgnrs-rail__vote > span,
   body.layout-basic .sdgnrs-rail__burn-emblem { display: none; }
   body.layout-basic .sdgnrs-rail__vote-label { text-align: center; }
 }

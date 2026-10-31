@@ -301,7 +301,7 @@ var Ne=Object.defineProperty;var S=(h,t)=>Ne(h,"name",{value:t,configurable:!0})
             <button type="button" class="df-reverse-dialog__close" data-bind="df-charity-close"
                     aria-label="Close charity vote">×</button>
             <header class="df-charity-dialog__head">
-              <span class="df-charity-dialog__mark" aria-hidden="true">♥</span>
+              <img class="df-charity-dialog__mark" src="/shared/gnrus-logo.svg" width="44" height="44" alt="" aria-hidden="true">
               <span>
                 <span class="df-charity-dialog__eyebrow">GNRUS · ON-CHAIN BALLOT</span>
                 <h3 id="df-charity-title">Choose the next donation</h3>
