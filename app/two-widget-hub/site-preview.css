@@ -576,7 +576,6 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   @container hub-rail (max-width:780px){
     body.layout-basic .info-rail .bottom-tools[data-info-slide="tokens"]:not([hidden]){--token-badge-size:26px;--token-padding:5px;--token-gap:5px;--token-amount-size:14px;grid-template-columns:48px}
     body.layout-basic .info-rail .bottom-tools>.token-tools__brand svg{width:42px;height:34px}
-    body.layout-basic .info-rail .token-fund__note{font-size:9px;white-space:normal}
     body.layout-basic .info-rail .sdgnrs-rail__vote{font-size:8px}
     body.layout-basic[data-desktop-page] .info-rail .dbb__entry-controls{min-width:0;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
     body.layout-basic[data-desktop-page] .info-rail .dbb__entry{min-width:0;grid-template-columns:74px minmax(0,1fr)}

@@ -48,35 +48,46 @@
 .dgn-winnings.is-currency .dgn-winnings__status { color: #ead394; font-size: .65rem; }
 /* The three badges share the existing payout bar; the selector and result
    never change its height or move the cards above it. */
-.dgn-winnings.has-currency-options { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'label' 'amount' 'status'; row-gap: 2px; padding: 6px 16px; }
+.dgn-winnings.has-currency-options { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'label' 'amount' 'status'; row-gap: 1px; padding: 4px 16px; }
 .dgn-winnings.has-currency-options .dgn-winnings__reward,
 .dgn-winnings.has-currency-options .dgn-winnings__amount { display: none; }
 .dgn-winnings.has-currency-options .dgn-winnings__label,
 .dgn-winnings.has-currency-options .dgn-winnings__status { text-align: center; }
 .rvl-box-currency-options {
-  position: relative; grid-area: amount; display: grid;
+  position: relative; isolation: isolate; grid-area: amount; display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  justify-self: center; width: 100%; max-width: 300px; min-width: 0; height: 58px;
+  justify-self: center; width: 100%; max-width: 252px; min-width: 0; height: 64px;
+}
+.rvl-box-currency-selector {
+  position: absolute; z-index: -1; top: 8px; left: 4px; right: 4px; height: 44px;
+  border-radius: 28px; background: #07100c; pointer-events: none;
+  box-shadow: inset 0 2px 7px #000b, inset 0 0 0 1px #c3aa6540;
 }
 .rvl-box-currency-option {
   position: relative; display: grid; justify-items: center; align-content: start;
-  gap: 5px; min-width: 0; padding-top: 3px; color: #ffe7a5;
-  font: 850 .62rem/1 system-ui; letter-spacing: .06em;
-  opacity: 1; transition: opacity var(--rvl-currency-fade-ms, 180ms) ease;
+  gap: 6px; min-width: 0; padding-top: 6px; color: #ffe7a5;
+  font: 850 8px/1 system-ui; letter-spacing: .06em;
 }
-.rvl-box-currency-option img { width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 2px 3px #0008); }
+.rvl-box-currency-option::before {
+  content: ''; position: absolute; top: 0; width: 0; height: 0;
+  border: 4px solid transparent; border-top: 5px solid #fae3a0;
+  opacity: 0; filter: drop-shadow(0 0 3px #eac361);
+}
+.rvl-box-currency-option::after {
+  content: ''; position: absolute; top: 52px; width: 24px; height: 2px;
+  border-radius: 2px; background: #6d654a; opacity: .4;
+}
+.rvl-box-currency-option img {
+  width: 44px; height: 44px; object-fit: contain; opacity: .8;
+  filter: brightness(.82); transform: scale(.94);
+  transition: opacity var(--rvl-currency-fade-ms, 180ms), filter 100ms, transform 100ms;
+}
 .rvl-box-currency-option > span { opacity: 0; transition: opacity var(--rvl-currency-fade-ms, 180ms) ease; }
-.rvl-box-currency-selector {
-  position: absolute; top: 0; left: 0; width: calc(100% / 3); height: 44px;
-  pointer-events: none; transform: translateX(calc(var(--rvl-currency-index, 0) * 100%));
-  transition: transform var(--rvl-currency-step-ms, 90ms) ease-out;
-}
-.rvl-box-currency-selector::before {
-  content: ''; position: absolute; inset: 0; width: 44px; margin: auto;
-  box-sizing: border-box; border: 2px solid #f4d578; border-radius: 50%;
-  box-shadow: 0 0 12px #f4d57860, inset 0 0 7px #f4d57830;
-}
-.rvl-box-currency-options.is-settled .rvl-box-currency-option:not(.is-selected) { opacity: 0; }
+.rvl-box-currency-option.is-active::before { opacity: 1; }
+.rvl-box-currency-option.is-active::after { opacity: 1; background: #ffe29a; box-shadow: 0 0 7px #f4cf70b3; }
+.rvl-box-currency-option.is-active img { opacity: 1; filter: brightness(1.1) drop-shadow(0 0 4px #f7d98550); transform: scale(1.04); }
+.rvl-box-currency-options.is-settled .rvl-box-currency-option:not(.is-selected) img { opacity: .17; filter: grayscale(.65) brightness(.7); transform: scale(.86); }
+.rvl-box-currency-options.is-settled .rvl-box-currency-option.is-selected::after { width: 32px; }
 .rvl-box-currency-options.is-named .rvl-box-currency-option.is-selected > span { opacity: 1; }
 .dgn-winnings.has-currency-options .dgn-winnings__status { min-height: .65rem; font-size: .56rem; letter-spacing: .02em; }
 .dgn-winnings.has-currency-result {
@@ -86,9 +97,11 @@
 }
 .dgn-winnings.has-currency-result .dgn-winnings__reward { display: none; }
 .dgn-winnings.has-currency-result .rvl-box-currency-options { grid-area: currencies; align-self: center; }
+.dgn-winnings.has-currency-result .rvl-box-currency-option { padding-top: 8px; gap: 12px; }
 .dgn-winnings.has-currency-result .rvl-box-currency-option img { width: 32px; height: 32px; }
-.dgn-winnings.has-currency-result .rvl-box-currency-option { font-size: .54rem; padding-top: 6px; }
-.dgn-winnings.has-currency-result .rvl-box-currency-selector::before { width: 38px; height: 38px; }
+.dgn-winnings.has-currency-result .rvl-box-currency-selector { top: 9px; left: 0; right: 0; height: 34px; }
+.dgn-winnings.has-currency-result .rvl-box-currency-option::after { top: 44px; width: 18px; }
+.dgn-winnings.has-currency-result .rvl-box-currency-option.is-selected::after { width: 24px; }
 /* Keep the later survival flip and any earned, clickable Luckbox beside the
    amount while the selected currency remains on the right. */
 .dgn-winnings.has-currency-result:has(.rvl-survival, .dgn-winnings__lootbox:not([hidden])) {
@@ -100,7 +113,7 @@
 .dgn-winnings.has-currency-result .dgn-winnings__lootbox-art { max-width: 58px; }
 .dgn-winnings.has-currency-result .rvl-spin-total { font-size: clamp(.85rem, 3.4vw, 1.15rem); }
 @media (prefers-reduced-motion: reduce) {
-  .rvl-box-currency-selector, .rvl-box-currency-option, .rvl-box-currency-option > span { transition: none; }
+  .rvl-box-currency-option img, .rvl-box-currency-option > span { transition: none; }
 }
 .dgn-winnings__announcement,
 .dgn-winnings :is(.rvl-survival-eyebrow, .rvl-survival-label, .rvl-survival-detail, .rvl-box-currency-eyebrow, .rvl-box-currency-name, .rvl-box-currency-sub) {

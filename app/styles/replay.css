@@ -1464,62 +1464,51 @@
 .replay-bubble-trigger--center { clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); z-index: 2; container-type:inline-size; }
 .replay-bubble-trigger--center:focus-visible { outline: none; }
 .replay-bubble-trigger--center .bubble-reveal { border-radius: 0; }
-.replay-bubble-trigger--center .bubble-reveal__badge {
-  width: 68%;
-  height: 68%;
-  position:relative;
-}
-.replay-bubble-trigger--center .bubble-reveal__badge::before{
-  content:'';position:absolute;inset:-2%;border-radius:50%;
-  border:1px solid #ffe9bba6;
-  background:radial-gradient(ellipse at 32% 16%,#fff0ce66,transparent 48%),linear-gradient(145deg,#b494d4,#5d338d 60%,#29163e);
-  box-shadow:inset 0 2px 3px #fff0cf66,inset 0 -3px 5px #1d0b4280,0 3px 4px #17082299;
-}
+/* One glass diamond and the original silver flame. */
+.replay-bubble-trigger--center .bubble-reveal__badge { width:64%; height:68%; }
+.replay-bubble-trigger--center .bubble-reveal__badge::before { content:none; }
 .replay-bubble-trigger--center .bubble-reveal__badge-art {
-  position:relative;z-index:1;
-  filter: brightness(1.25) sepia(.7) saturate(1.8) drop-shadow(0 2px 1px #19082be6) drop-shadow(0 0 5px #ffe7a3a0);
+  filter:drop-shadow(0 2px 1px #0009); animation:none;
 }
-@media(prefers-reduced-motion:no-preference){
-  .replay-bubble-trigger--center:not(:disabled) .bubble-reveal__badge-art{animation:replay-center-invite 2.4s ease-in-out infinite}
-  @keyframes replay-center-invite{50%{filter:brightness(1.55) sepia(.7) saturate(1.8) drop-shadow(0 2px 1px #19082be6) drop-shadow(0 0 9px #ffe7a3c0)}}
-}
+.replay-bubble-trigger--center:not(:disabled) .bubble-reveal__badge-art { animation:none; }
 .replay-bubble-trigger--center .bubble-reveal__film {
-  background:
-    radial-gradient(ellipse at 35% 18%, #c7a6ff80, transparent 60%),
-    linear-gradient(145deg, #a27cdf, #6941ad 48%, #351b64);
-  box-shadow: none;
+  background:radial-gradient(ellipse at 30% 16%,#fff6d829,transparent 62%),linear-gradient(145deg,#596357,#2e392f 47%,#111d17);
+  box-shadow:none;
 }
-/* The center is a cut amethyst seal. Its facets follow the diamond instead
-   of cropping the shared bubble's square rim and circular badge highlights. */
 .replay-bubble-trigger--center .bubble-reveal__skin {
-  background: conic-gradient(from 0deg at 50% 50%, #f0dfff1a 0deg 90deg,
-    #18073030 90deg 180deg, #18073014 180deg 270deg, #f0dfff30 270deg);
-  box-shadow: none;
+  background:linear-gradient(135deg,#fff8db22 0%,#fff8db06 44%,#0000 45%,#0009 100%);
+  box-shadow:none;
 }
 .replay-bubble-trigger--center .bubble-reveal__skin::before {
-  inset: auto;
-  top: 50%; left: 50%;
-  width: 64%; height: 64%;
-  border: 2px solid #f4d790cc;
-  border-radius: 1px;
-  background: none;
-  transform: translate(-50%, -50%) rotate(45deg);
-  box-shadow: inset 1px 1px 0 #fff2, inset -1px -1px 0 #200c4480,
-    0 0 0 2px #28134080;
+  inset:auto;top:50%;left:50%;width:64%;height:64%;border-radius:1px;background:none;
+  transform:translate(-50%,-50%) rotate(45deg);
+  border:1px solid #ddc58bd9;
+  box-shadow:inset 1px 1px 0 #fff3c578,inset -1px -1px 0 #050d06c4,0 0 0 2px #151c13;
 }
-.replay-bubble-trigger--center .bubble-reveal__skin::after,
-.replay-bubble-trigger--center .bubble-reveal__glint,
-.replay-bubble-trigger--center .bubble-reveal__lowlight { display: none; }
-.replay-bubble-trigger--center .bubble-reveal__badge-optics { display:block;opacity:.8; }
-.replay-bubble-trigger--center:focus-visible .bubble-reveal__film {
-  filter: brightness(1.12);
+.replay-bubble-trigger--center .bubble-reveal__skin::after {
+  content:'';display:block;position:absolute;inset:8%;border-radius:0;
+  background:linear-gradient(135deg,transparent 26%,#ffffed22 27%,#ffffed0a 44%,transparent 45%);
+  border:0;box-shadow:none;transform:none;opacity:1;
 }
-@media (hover: hover) and (pointer: fine) {
-  .replay-bubble-trigger--center:hover .bubble-reveal__film { filter: brightness(1.12); }
-}
+.replay-bubble-trigger--center .bubble-reveal__badge-optics { display:none; }
 .replay-ticket-center.replay-ticket-center--covered::before {
-  background: #6941ad;
-  border-color: #d7bcf7;
+  background:#2e392f;border-color:#d9c58d;
+  box-shadow:0 0 0 1px #172019,0 3px 5px #0008;animation:none;
+}
+.replay-ticket-center:has(.replay-bubble-trigger--center:focus-visible)::before {
+  outline-color:#fff0b8;
+}
+.replay-bubble-trigger--center:focus-visible .bubble-reveal__film { filter:brightness(1.15); }
+@media(hover:hover) and (pointer:fine){
+ .replay-bubble-trigger--center:hover .bubble-reveal__film { filter:brightness(1.15); }
+}
+
+.replay-bubble-trigger--center .bubble-reveal__glint,
+.replay-bubble-trigger--center .bubble-reveal__lowlight { display:none; }
+
+.replay-ticket-center.replay-ticket-center--covered::before {
+  background: #2e392f;
+  border-color: #d9c58d;
   box-shadow: 0 0 0 1px #32154f, 0 2px 5px #1c092e80, 0 0 9px #9c70e84d;
   animation: none;
 }
