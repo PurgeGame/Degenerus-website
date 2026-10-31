@@ -781,7 +781,8 @@ body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicato
   .concept-track[data-scale="jackpot"]>div{transition:height .8s cubic-bezier(.22,.65,.3,1);background:linear-gradient(90deg,#a36f28,#ffe598 45%,#b88732);box-shadow:0 -2px 10px #edc76666,inset 0 2px #fff2bd}
   .concept-track[data-scale="jackpot"]::after{display:none}
   .concept-thermo[data-phase="jackpot"] .site-pool-day b{color:#f4ce73}
-  .concept-thermo[data-phase="jackpot"] .concept-pool-amount strong{color:#f6dea0;max-width:94px;overflow-wrap:anywhere}
+  .concept-thermo[data-phase="jackpot"] .concept-pool-amount{display:flex;align-items:baseline;justify-content:center;gap:4px}
+  .concept-thermo[data-phase="jackpot"] .concept-pool-amount strong{font-size:18px;color:#f6dea0;overflow-wrap:normal}
 }
 @media(prefers-reduced-motion:reduce){.concept-track[data-scale="jackpot"]>div{transition:none}}
 @media(min-width:1100px){
