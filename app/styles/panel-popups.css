@@ -229,6 +229,7 @@ body.layout-basic .panel-popup .txh__toolbar:not(:has(.txh__filter[aria-pressed=
 .pawn-figure > span { color: #a99db5; font: 750 .66rem/1 Inter, sans-serif; letter-spacing: .12em; }
 .pawn-figure > strong { color: #fde68a; font-size: clamp(1.4rem, 5vw, 1.9rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .pawn-terms { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: 0; }
+.pawn-terms--quote > div:first-child { grid-column: 1 / -1; }
 .pawn-terms > div { padding: .5rem .6rem; border: 1px solid #b899582b; border-radius: 8px; background: #ffffff05; }
 .pawn-terms dt { color: #a99db5; font: 750 .6rem/1 Inter, sans-serif; letter-spacing: .1em; }
 .pawn-terms dd { margin: .3rem 0 0; color: #f1e8d8; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

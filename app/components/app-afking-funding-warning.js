@@ -20,7 +20,7 @@ var b=Object.defineProperty;var o=(t,e)=>b(t,"name",{value:e,configurable:!0});i
           </span>
           <small data-bind="afking-warning-order">— / DAY</small>
         </div>
-        <p>Less than a week of claimable and prepaid ETH left.</p>
+        <p>Less than a week of funding left.</p>
         <div class="afking-funding-warning__actions">
           <button type="button" class="afking-funding-warning__later"
                   data-bind="afking-warning-dismiss">NOT NOW</button>
