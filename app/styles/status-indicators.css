@@ -551,6 +551,12 @@ body.layout-basic .dbb__burn:has(> quest-objective-indicator:not([hidden])) {
 }
 
 /* Quest bubbles occupy the outer upper corners of the currency buttons. */
+body.layout-basic .deg-currency-option > boon-product-indicator {
+  position: relative;
+  inset: auto;
+  flex: 0 0 1.62rem;
+  margin: 0;
+}
 body.layout-basic .deg-currency-option > quest-objective-indicator {
   z-index: 2;
   top: -0.55rem;

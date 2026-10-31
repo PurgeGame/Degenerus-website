@@ -321,8 +321,8 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   #site-buy-board .site-degenerette-cell .site-game-art{grid-template-rows:minmax(0,1fr);box-sizing:border-box;padding:0 0 0 7%}
   #site-buy-board .site-degenerette-cell .site-feature-logo{filter:drop-shadow(0 3px 5px #17020b99);transform:translateY(4px)}
   #site-buy-board .site-degenerette-cell .site-game-art:hover{filter:brightness(1.1)}
-  #site-buy-board .site-degenerette-symbol{display:grid;place-items:center;justify-self:center;width:48px;height:48px;min-width:0;padding:0;border:0;border-radius:50%;background:none;cursor:pointer}
-  #site-buy-board .site-degenerette-symbol img{display:block;width:48px;height:48px;object-fit:contain;transition:filter 120ms}
+  #site-buy-board .site-degenerette-symbol{display:grid;place-items:center;justify-self:center;width:72px;height:72px;min-width:0;padding:0;border:0;border-radius:50%;background:none;cursor:pointer}
+  #site-buy-board .site-degenerette-symbol img{display:block;width:72px;height:72px;object-fit:contain;transition:filter 120ms}
   #site-buy-board .site-degenerette-symbol:not(:disabled):hover img{filter:brightness(1.2) drop-shadow(0 0 4px #e8c57466)}
   #site-buy-board .site-degenerette-quickplay{width:100%;min-width:0;min-height:26px;padding:5px 4px;border:1px solid #e8c574;border-radius:4px;background:linear-gradient(#f4d47c,#b98a36);box-shadow:inset 0 1px #fff4c366,0 2px 3px #0004;color:#2b180d;font:850 clamp(9px,1.85cqi,11px)/1.2 Inter,sans-serif;letter-spacing:.01em;overflow-wrap:anywhere;cursor:pointer}
   #site-buy-board .site-degenerette-quickplay:disabled{opacity:.55;cursor:default}

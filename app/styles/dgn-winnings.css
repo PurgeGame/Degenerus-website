@@ -79,6 +79,26 @@
 .rvl-box-currency-options.is-settled .rvl-box-currency-option:not(.is-selected) { opacity: 0; }
 .rvl-box-currency-options.is-named .rvl-box-currency-option.is-selected > span { opacity: 1; }
 .dgn-winnings.has-currency-options .dgn-winnings__status { min-height: .65rem; font-size: .56rem; letter-spacing: .02em; }
+.dgn-winnings.has-currency-result {
+  grid-template-columns: minmax(0, 1fr) 126px;
+  grid-template-areas: 'label currencies' 'amount currencies' 'status currencies';
+  column-gap: 8px;
+}
+.dgn-winnings.has-currency-result .dgn-winnings__reward { display: none; }
+.dgn-winnings.has-currency-result .rvl-box-currency-options { grid-area: currencies; align-self: center; }
+.dgn-winnings.has-currency-result .rvl-box-currency-option img { width: 32px; height: 32px; }
+.dgn-winnings.has-currency-result .rvl-box-currency-option { font-size: .54rem; padding-top: 6px; }
+.dgn-winnings.has-currency-result .rvl-box-currency-selector::before { width: 38px; height: 38px; }
+/* Keep the later survival flip and any earned, clickable Luckbox beside the
+   amount while the selected currency remains on the right. */
+.dgn-winnings.has-currency-result:has(.rvl-survival, .dgn-winnings__lootbox:not([hidden])) {
+  grid-template-columns: 60px minmax(0, 1fr) 126px;
+  grid-template-areas: 'reward label currencies' 'reward amount currencies' 'reward status currencies';
+  column-gap: 6px; padding-inline: 8px;
+}
+.dgn-winnings.has-currency-result:has(.rvl-survival, .dgn-winnings__lootbox:not([hidden])) .dgn-winnings__reward { display: grid; width: 60px; }
+.dgn-winnings.has-currency-result .dgn-winnings__lootbox-art { max-width: 58px; }
+.dgn-winnings.has-currency-result .rvl-spin-total { font-size: clamp(.85rem, 3.4vw, 1.15rem); }
 @media (prefers-reduced-motion: reduce) {
   .rvl-box-currency-selector, .rvl-box-currency-option, .rvl-box-currency-option > span { transition: none; }
 }
