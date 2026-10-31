@@ -1461,15 +1461,28 @@
   width: 119%;
   height: 119%;
 }
-.replay-bubble-trigger--center { clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); z-index: 2; }
+.replay-bubble-trigger--center { clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); z-index: 2; container-type:inline-size; }
 .replay-bubble-trigger--center:focus-visible { outline: none; }
 .replay-bubble-trigger--center .bubble-reveal { border-radius: 0; }
 .replay-bubble-trigger--center .bubble-reveal__badge {
-  width: 68%;
-  height: 68%;
+  width: 60%;
+  height: 60%;
+  position:relative;
+  top:-9%;
 }
 .replay-bubble-trigger--center .bubble-reveal__badge-art {
-  filter: drop-shadow(0 1px 1px #19082be6) drop-shadow(0 0 3px #ece1ff4d);
+  filter: brightness(1.25) sepia(.7) saturate(1.8) drop-shadow(0 2px 1px #19082be6) drop-shadow(0 0 5px #ffe7a3a0);
+}
+.replay-center-pop-label{
+  position:absolute;left:25%;right:25%;bottom:23%;z-index:5;
+  color:#fff1b9;font:900 clamp(8px,12cqi,18px)/1 Inter,system-ui,sans-serif;
+  letter-spacing:.1em;text-align:center;text-shadow:0 1px 2px #241137,0 0 6px #ffe7a355;
+  pointer-events:none;
+}
+.replay-bubble-trigger--center:has(.is-popping) .replay-center-pop-label{visibility:hidden}
+@media(prefers-reduced-motion:no-preference){
+  .replay-bubble-trigger--center:not(:disabled) .bubble-reveal__badge-art{animation:replay-center-invite 2.4s ease-in-out infinite}
+  @keyframes replay-center-invite{50%{filter:brightness(1.55) sepia(.7) saturate(1.8) drop-shadow(0 2px 1px #19082be6) drop-shadow(0 0 9px #ffe7a3c0)}}
 }
 .replay-bubble-trigger--center .bubble-reveal__film {
   background:
@@ -1488,7 +1501,7 @@
   inset: auto;
   top: 50%; left: 50%;
   width: 64%; height: 64%;
-  border: 1px solid #ead5ff99;
+  border: 2px solid #f4d790cc;
   border-radius: 1px;
   background: none;
   transform: translate(-50%, -50%) rotate(45deg);
