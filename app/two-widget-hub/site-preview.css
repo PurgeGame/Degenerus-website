@@ -771,6 +771,20 @@ body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicato
 
 /* The prize thermometer only belongs to the post-Degenesis purchase phase. */
 .concept-thermo[hidden]{display:none!important}
+.site-pool-peak[hidden],.site-pool-phase[hidden],.site-pool-win-label[hidden]{display:none!important}
+@media(min-width:1100px){
+  .concept-thermo[data-phase="jackpot"]{padding-top:9px;gap:7px}
+  .site-pool-peak{display:flex;flex-direction:column;align-items:center;gap:3px;width:90px;padding:7px 3px;border:1px solid #9b8a5766;border-radius:5px;background:linear-gradient(#272b1e,#151a13);box-shadow:inset 0 1px #e9d89122}
+  .site-pool-peak span{font:750 9px/1.2 Inter,system-ui,sans-serif;letter-spacing:.06em;color:#bfb18b}
+  .site-pool-peak strong{font:800 20px/1.1 Inter,system-ui,sans-serif;color:#f6dea0;max-width:100%;overflow-wrap:anywhere}
+  .site-pool-phase{font:850 12px/1.2 Inter,system-ui,sans-serif;letter-spacing:.06em;color:#f4ce73;margin-top:4px}
+  .site-pool-win-label{font:750 10px/1.2 Inter,system-ui,sans-serif;letter-spacing:.04em;color:#bfb18b;margin-top:2px}
+  .concept-track[data-scale="jackpot"]>div{transition:height .8s cubic-bezier(.22,.65,.3,1);background:linear-gradient(90deg,#a36f28,#ffe598 45%,#b88732);box-shadow:0 -2px 10px #edc76666,inset 0 2px #fff2bd}
+  .concept-track[data-scale="jackpot"]::after{display:none}
+  .concept-thermo[data-phase="jackpot"] .site-pool-day b{color:#f4ce73}
+  .concept-thermo[data-phase="jackpot"] .concept-pool-amount strong{color:#f6dea0;max-width:94px;overflow-wrap:anywhere}
+}
+@media(prefers-reduced-motion:reduce){.concept-track[data-scale="jackpot"]>div{transition:none}}
 @media(min-width:1100px){
   body.layout-basic[data-desktop-page] .jackpot-hero.site-no-thermo{grid-template-areas:"draw flip"!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
   body.layout-basic[data-desktop-page][data-hub-layout="wide"] .jackpot-hero.site-no-thermo{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)!important}
@@ -778,3 +792,5 @@ body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicato
 @media(min-width:1100px) and (max-height:820px){
   body.layout-basic[data-desktop-page][data-hub-layout="wide"] .jackpot-hero.site-no-thermo{grid-template-columns:minmax(0,1.22fr) minmax(0,1fr)!important}
 }
+
+.concept-thermo.is-pool-loading .concept-track>div{opacity:0}
