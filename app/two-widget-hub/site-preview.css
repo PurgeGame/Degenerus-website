@@ -171,7 +171,7 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   body.layout-basic .mpager-tabs>#unav-wallet-app svg{width:20px;height:20px}
 }
 
-#site-buy-board,.concept-degen-score,.concept-thermo,.site-view-switch{display:none}
+#site-buy-board,.concept-degen-score,.concept-thermo,.site-view-switch,.site-level-display{display:none}
 @media(min-width:1100px){
   body.layout-basic[data-desktop-page]{
     --desktop-width:min(calc(100vw - 120px),var(--hub-width,1160px));
@@ -204,9 +204,14 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   .concept-thermo{display:flex}
   .concept-track{min-height:100px}
   .concept-track>div{height:var(--site-pool-fill,0%)}
-  /* A permanent cabinet selector mirrors the score window on the other rail. */
+  .site-level-display{
+    position:absolute;right:3.2%;top:46%;transform:translateY(-50%);z-index:9;
+    box-sizing:border-box;width:12.4%;display:grid;gap:7px;justify-items:center;
+    pointer-events:none;--concept-score-color:#f4d998;--concept-score-glow:#f4d99885;
+  }
+  /* Keep both views within reach beneath the level readout. */
   .site-view-switch{
-    position:absolute;right:3.2%;top:46%;transform:translateY(-50%);z-index:20;
+    position:absolute;right:3.2%;top:73%;transform:translateY(-50%);z-index:20;
     box-sizing:border-box;width:12.4%;display:grid;text-align:center;
   }
   .site-view-switch[hidden]{display:none}
@@ -315,6 +320,12 @@ body.layout-basic .site-referral-strip .site-referral-custom [data-bind="deg-ref
   #site-buy-board .concept-games{grid-template-rows:minmax(0,1fr);overflow:hidden}
   #site-buy-board .concept-game{box-sizing:border-box;grid-area:1/1;grid-template-rows:minmax(0,1fr);padding:9% 7% 6%;border:0;cursor:default;overflow:hidden}
   #site-buy-board .concept-game[hidden]{display:none!important}
+  body.layout-basic .jackpot-hero__machine #site-buy-board .replay-tq:has(> ticket-quick-buy) .dgx-module--tickets{padding-top:8%;padding-bottom:calc(9% + 28px)}
+  #site-buy-board ticket-quick-buy{position:absolute;z-index:5;left:10%;right:23%;bottom:6%;display:block}
+  #site-buy-board .site-ticket-buy{display:block;width:100%;min-height:26px;padding:5px 3px;border:1px solid #e8c574;border-radius:4px;background:linear-gradient(#f4d47c,#b98a36);box-shadow:inset 0 1px #fff4c366,0 2px 3px #0004;color:#2b180d;font:850 clamp(8px,1.85cqi,11px)/1.2 Inter,system-ui,sans-serif;white-space:nowrap;cursor:pointer}
+  #site-buy-board .site-ticket-buy:disabled{opacity:.55;cursor:default}
+  #site-buy-board .site-ticket-buy:not(:disabled):hover{filter:brightness(1.1)}
+  #site-buy-board .site-ticket-buy:focus-visible{outline:2px solid #e0c282;outline-offset:2px}
   #site-buy-board .site-game-art{display:grid;grid-template-rows:minmax(0,1fr) 32% auto;gap:4px;width:100%;height:100%;min-height:0;min-width:0;padding:0;border:0;background:none;cursor:pointer}
   #site-buy-board .site-feature-logo{display:block;position:static;width:100%;height:100%;min-height:0;object-fit:contain;transform:none}
   #site-buy-board .site-degenerette-cell{grid-template-rows:minmax(0,1fr) auto auto;gap:6px;padding:5% 4% 6%}
