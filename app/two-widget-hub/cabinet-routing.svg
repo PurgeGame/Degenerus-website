@@ -67,12 +67,6 @@
     <path d="M430 82V116L474 160"/>
     <path d="M850 82V116L806 160"/>
 
-    <!-- One controller bus per foil socket. -->
-    <path d="M148 300H222L260 338H292"/>
-    <path d="M148 718H222L260 680H292"/>
-    <path d="M1132 300H1058L1020 338H988"/>
-    <path d="M1132 718H1058L1020 680H988"/>
-
     <!-- Four independent lanes leave the LED key and fan into the main jackpot
          processor. They are authored source-first for the live current sheet. -->
     <path d="M456 1098V1018L438 1000H432L414 982V915"/>
