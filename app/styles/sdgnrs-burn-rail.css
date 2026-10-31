@@ -419,3 +419,30 @@ body.layout-basic .df-burn-dialog__asset button:disabled {
   body.layout-basic .sdgnrs-rail__vote,
   body.layout-basic .sdgnrs-rail__burn { transition: none; }
 }
+
+/* GNRUS uses the same popup shell as the other account actions. */
+body.layout-basic .gnrus-dialog .panel-popup__window { width: min(26rem, calc(100vw - 1.5rem)); }
+body.layout-basic .gnrus-dialog .panel-popup__header { display: flex; align-items: center; gap: .6rem; }
+body.layout-basic .gnrus-dialog .panel-popup__header img { flex: none; }
+body.layout-basic .gnrus-dialog .panel-popup__header h2 { flex: 1; font-size: 1rem; }
+body.layout-basic .gnrus-dialog .panel-popup__body { display: grid; gap: .8rem; }
+body.layout-basic .gnrus-dialog__choices { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+body.layout-basic .gnrus-dialog button { cursor: pointer; }
+body.layout-basic .gnrus-dialog__choices button,
+body.layout-basic .gnrus-dialog__input-row button { border: 1px solid #bba0cf40; border-radius: 6px; padding: .55rem; background: #bba0cf0d; color: #e9dced; font: 750 .72rem/1.2 Inter, sans-serif; }
+body.layout-basic .gnrus-dialog__choices button[aria-pressed="true"] { border-color: #a9e6f5; background: #a9e6f515; color: #d8f7ff; }
+body.layout-basic .gnrus-dialog__label { color: #c7b9cf; font: 750 .7rem/1.2 Inter, sans-serif; letter-spacing: .06em; }
+body.layout-basic .gnrus-dialog__input-row { display: flex; gap: .4rem; }
+body.layout-basic .gnrus-dialog input { width: 100%; min-width: 0; border: 1px solid #bba0cf55; border-radius: 6px; padding: .65rem; background: #111018; color: #fff; font: 750 1.25rem/1.2 'Roboto Mono', monospace; }
+body.layout-basic .gnrus-dialog__quote { color: #a9e6f5; font: 750 1.15rem/1.3 'Roboto Mono', monospace; margin: 0; overflow-wrap: anywhere; }
+body.layout-basic .gnrus-dialog__balance,
+body.layout-basic .gnrus-dialog__notice,
+body.layout-basic .gnrus-dialog__feedback { margin: 0; color: #c7b9cf; font-size: .8rem; overflow-wrap: anywhere; }
+body.layout-basic .gnrus-dialog__feedback { color: #ffb4ae; }
+body.layout-basic .gnrus-dialog__submit { width: 100%; border: 1px solid #e996df88; border-radius: 7px; padding: .8rem; background: linear-gradient(#7a315f,#542340); color: #fff; font: 850 .85rem/1.2 Inter, sans-serif; }
+body.layout-basic .gnrus-dialog button:disabled { cursor: default; opacity: .45; }
+body.layout-basic .gnrus-dialog :is(button,input):focus-visible { outline: 2px solid #a9e6f5; outline-offset: 2px; }
+@media (max-width: 768px) {
+  /* Keep Min/Max and Redeem under the finger when an amount field loses focus. */
+  body.layout-basic .gnrus-dialog { place-items: start center; overflow-y: auto; }
+}
