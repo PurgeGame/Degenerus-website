@@ -41,10 +41,10 @@
 # refuses (one CSP violation per load): turn that feature off in the
 # Cloudflare dashboard, or accept the console line.
 /app/*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-1G2fMp6/MqPuOP9+uKqscNhJPSMrXFL02DUcalVfHog=' 'sha256-6rvZal9GVqn2M8uTRHktWL1/Q2/bcUyQemzhJC4CPxY=' 'sha256-BUTaa/1hcg1fpk7n7TxGD2oTim1cztWidiZNI7p0FgY=' 'sha256-D1njDSKVdK5RKeZLQ7z56kLPLBJvHY4eaKwOYqEAJK8=' 'sha256-E8oH0rozZwIN5L3rkgYP9t16Y7qvtdjerULMqsQWs2U=' 'sha256-FVJ4ohSu6yat6jPaXf4hnFfT6KGF24IOp1SuOXEGcLw=' 'sha256-NdVnihs/rDSvaTCW94ILdeJbUSEZCcj9PCsMTtIafNc=' 'sha256-QqOuusUQEeRJ+5U9JDzId5y2/u3/nfavpzhcrLln9BM=' 'sha256-TELgL/H1gkiezuvEkgTUreih0I2NOshWOQ0JFlQ4C34=' 'sha256-Tdzb/ejH26E+L9a4e4FXv26U8MiHK4XKz9QftGSh2Qc=' 'sha256-b+1nk82kDHKQZ1jvZKuvQ/ToD6PowzI3wHSbJTPxLdo=' 'sha256-pUMnpEaskxm5LEpUQfFMfwysYWz6z4A8rjyC99uHRnY=' 'sha256-tSxFvQZZ4xOO6GVHvBfSpT7eUo7f3+t0A+bfBihOkeo=' 'sha256-vRxzTWeVkv45TVYWjNehbx6sHxisQqeg0iWO1CP9xY4=' 'sha256-xjG1iuLAj/5hLLcbygmwd90Z7ov00RLOJ5WV9YU8vdc=' 'report-sample' https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://rpc.walletconnect.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org https://cloudflareinsights.com wss://relay.walletconnect.com wss://relay.walletconnect.org wss://mm-sdk-relay.api.cx.metamask.io https://keys.coinbase.com https://rpc.wallet.coinbase.com https://ethereum-sepolia-rpc.publicnode.com https://gateway.tenderly.co https://base-sepolia.gateway.tenderly.co; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-+Te+YmK5L5InKJwo+f613GBnGEqfhS8mMDnTUeb9yzg=' 'sha256-+Wd4gdh9FkAUiIZVnjJhZUmcowIGQEGS9Bgi0RG9wmc=' 'sha256-/2DmwB2bIvoapNJSba0wP8Jxqx1LAPd6Ki98ysNqoMA=' 'sha256-1G2fMp6/MqPuOP9+uKqscNhJPSMrXFL02DUcalVfHog=' 'sha256-Cm3cTiBANOZS4fJLNi1/Zo1OyM3mcI5n+lAaGnbCt6c=' 'sha256-E8oH0rozZwIN5L3rkgYP9t16Y7qvtdjerULMqsQWs2U=' 'sha256-FVJ4ohSu6yat6jPaXf4hnFfT6KGF24IOp1SuOXEGcLw=' 'sha256-HyW4LSx5Wj+gUaDrYiKL5yctjTAjOC01hhma0xJi690=' 'sha256-NdVnihs/rDSvaTCW94ILdeJbUSEZCcj9PCsMTtIafNc=' 'sha256-TI+d70zUIcApUDqUkkLu7o9cGjyKq8fdCRzEmFRaqno=' 'sha256-Tdzb/ejH26E+L9a4e4FXv26U8MiHK4XKz9QftGSh2Qc=' 'sha256-hS82kERhbYfI7vLvglJBiolby/GXkII/OLxnmmLFVEo=' 'sha256-pUMnpEaskxm5LEpUQfFMfwysYWz6z4A8rjyC99uHRnY=' 'sha256-v1+wB3OLaIXqg+NMDvmCNIe/VbUgGJA9pJCUD2r2vp4=' 'sha256-vRxzTWeVkv45TVYWjNehbx6sHxisQqeg0iWO1CP9xY4=' 'report-sample' https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://rpc.walletconnect.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org https://cloudflareinsights.com wss://relay.walletconnect.com wss://relay.walletconnect.org wss://mm-sdk-relay.api.cx.metamask.io https://keys.coinbase.com https://rpc.wallet.coinbase.com https://ethereum-sepolia-rpc.publicnode.com https://gateway.tenderly.co https://base-sepolia.gateway.tenderly.co; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
 
 /beta/*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-E8oH0rozZwIN5L3rkgYP9t16Y7qvtdjerULMqsQWs2U=' 'sha256-NdVnihs/rDSvaTCW94ILdeJbUSEZCcj9PCsMTtIafNc=' 'sha256-QqOuusUQEeRJ+5U9JDzId5y2/u3/nfavpzhcrLln9BM=' 'sha256-pUMnpEaskxm5LEpUQfFMfwysYWz6z4A8rjyC99uHRnY=' 'sha256-tSxFvQZZ4xOO6GVHvBfSpT7eUo7f3+t0A+bfBihOkeo=' 'sha256-vRxzTWeVkv45TVYWjNehbx6sHxisQqeg0iWO1CP9xY4=' 'report-sample' https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://rpc.walletconnect.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org https://cloudflareinsights.com wss://relay.walletconnect.com wss://relay.walletconnect.org wss://mm-sdk-relay.api.cx.metamask.io https://keys.coinbase.com https://rpc.wallet.coinbase.com https://ethereum-sepolia-rpc.publicnode.com https://gateway.tenderly.co https://base-sepolia.gateway.tenderly.co; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-/2DmwB2bIvoapNJSba0wP8Jxqx1LAPd6Ki98ysNqoMA=' 'sha256-E8oH0rozZwIN5L3rkgYP9t16Y7qvtdjerULMqsQWs2U=' 'sha256-NdVnihs/rDSvaTCW94ILdeJbUSEZCcj9PCsMTtIafNc=' 'sha256-hS82kERhbYfI7vLvglJBiolby/GXkII/OLxnmmLFVEo=' 'sha256-pUMnpEaskxm5LEpUQfFMfwysYWz6z4A8rjyC99uHRnY=' 'sha256-vRxzTWeVkv45TVYWjNehbx6sHxisQqeg0iWO1CP9xY4=' 'report-sample' https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://base-sepolia-rpc.publicnode.com https://sepolia.base.org https://rpc.walletconnect.org https://esm.sh https://api.web3modal.org https://pulse.walletconnect.org https://cloudflareinsights.com wss://relay.walletconnect.com wss://relay.walletconnect.org wss://mm-sdk-relay.api.cx.metamask.io https://keys.coinbase.com https://rpc.wallet.coinbase.com https://ethereum-sepolia-rpc.publicnode.com https://gateway.tenderly.co https://base-sepolia.gateway.tenderly.co; img-src 'self' data: blob: https://cdn.discordapp.com https://api.web3modal.org https://imagedelivery.net; media-src 'self'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
 
 /index.html
   Cache-Control: no-store
@@ -71,16 +71,18 @@
   Cache-Control: no-store
 
 /beta
-  Cache-Control: no-store
+  Cache-Control: no-cache, must-revalidate
 
 /beta/
-  Cache-Control: no-store
+  Cache-Control: no-cache, must-revalidate
 
 /beta/index.html
-  Cache-Control: no-store
+  Cache-Control: no-cache, must-revalidate
 
+# Shared navigation and artwork can be reused between visits. Unversioned
+# files still refresh promptly; fingerprinted stylesheets override this below.
 /shared/*
-  Cache-Control: no-store
+  Cache-Control: public, max-age=60, must-revalidate
 
 # The lesson controller and its state/renderer modules change together.
 # Revalidate the entire graph so returning players cannot mix old exports
@@ -112,6 +114,10 @@
 /app/components/*
   Cache-Control: public, max-age=60, must-revalidate
 
+# Chain projections and their generated schema must refresh with app code.
+/app/chain/*
+  Cache-Control: public, max-age=60, must-revalidate
+
 # app-player-funds-dialog and vrf-donation share a named-export ABI. The
 # general 60s freshness window can pair a newly revalidated importer with the
 # previous dependency revision during a deploy, which fails the whole dynamic
@@ -121,20 +127,21 @@
   ! Cache-Control
   Cache-Control: no-cache, must-revalidate
 
-# The app's own entry document was the one HTML entry point with NO rule —
-# the same 4h-default trap as the modules above, but for the page itself.
+# Always check entry HTML for updates, while allowing ETag/304 reuse of its
+# body. A fresh document discovers newly fingerprinted styles and libraries.
 /app
-  Cache-Control: no-store
+  Cache-Control: no-cache, must-revalidate
 
 /app/
-  Cache-Control: no-store
+  Cache-Control: no-cache, must-revalidate
 
 /app/index.html
-  Cache-Control: no-store
+  Cache-Control: no-cache, must-revalidate
 
-# Stylesheets and vendor modules ship in lockstep with the app modules above —
-# same 60s window, so a publish can never pair new JS with stale CSS or a
-# stale ethers. Repeat loads inside the window are cheap 304s on ETag.
+# Unversioned stylesheets and vendor URLs retain a short freshness window.
+# The publisher points app consumers at content-hashed copies with the
+# immutable policy below. Within max-age a normal visit needs no HTTP request;
+# after expiry, ETag revalidation can return a small 304 response.
 /app/styles/*
   Cache-Control: public, max-age=60, must-revalidate
 
@@ -180,7 +187,22 @@
 
 # Two-widget presentation assets
 /app/two-widget-hub/*
-  Cache-Control: no-store
+  Cache-Control: public, max-age=60, must-revalidate
+
+# Generated by db/cache-publish-assets.mjs, never authored or edited in place.
+# Content hashes live in the PATH (the edge can ignore query-string revisions).
+# Detach the short-lived parent policy: matching Cloudflare rules are additive.
+/app/vendor/cache-*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/app/styles/cache-*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/shared/cache-*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
 
 # BEGIN temporary information-page pause
 /

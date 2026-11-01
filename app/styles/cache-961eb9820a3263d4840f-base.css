@@ -1,0 +1,125 @@
+/* base.css -- Page-level overrides and layout for beta */
+
+/* Beta page accent overrides (shared/nav.css uses purple) */
+:root {
+  --accent-primary: #f5a623;
+  --accent-secondary: #ffc04d;
+}
+
+body {
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #24130a 100%);
+}
+
+/* ------------------------------------------------------------------ */
+/* Layout                                                               */
+/* ------------------------------------------------------------------ */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: clamp(0.5rem, 2vw, 1rem);
+}
+
+/* ------------------------------------------------------------------ */
+/* Page header                                                          */
+/* ------------------------------------------------------------------ */
+.page-header {
+  text-align: center;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+.page-header-logo {
+  width: 52px;
+  height: 52px;
+  margin-bottom: 0.65rem;
+  filter: drop-shadow(0 0 18px rgba(245, 166, 35, 0.4));
+}
+
+.page-header h1 {
+  color: var(--accent-primary);
+  font-size: clamp(1.4rem, 4vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin: 0 0 0.5rem;
+}
+
+.page-header .subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  max-width: 580px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Main layout (two-column with sidebar)                               */
+/* ------------------------------------------------------------------ */
+.main-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  align-items: start;
+}
+
+/* ------------------------------------------------------------------ */
+/* Stale data indicator                                                */
+/* ------------------------------------------------------------------ */
+.stale-indicator {
+  text-align: center;
+  padding: 0.6rem 1rem;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 8px;
+  color: var(--warning);
+  font-size: 0.82rem;
+  font-weight: 500;
+  margin-top: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+/* ------------------------------------------------------------------ */
+/* Footer                                                               */
+/* ------------------------------------------------------------------ */
+footer {
+  text-align: center;
+  padding: 1.5rem 0 1rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Utility classes                                                      */
+/* ------------------------------------------------------------------ */
+.text-dim {
+  color: var(--text-dim);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Tablet: sidebar collapses below main */
+@media (max-width: 920px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

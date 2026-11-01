@@ -1,0 +1,62 @@
+.decimator-demo-page {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(127, 29, 29, 0.28), transparent 38rem),
+    #08070a;
+}
+
+.decimator-demo {
+  box-sizing: border-box;
+  width: min(96rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 3rem) clamp(0.65rem, 2vw, 1.4rem);
+}
+
+.decimator-demo__header {
+  display: grid;
+  grid-template-columns: minmax(4rem, 1fr) auto minmax(4rem, 1fr);
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  color: #fecaca;
+  text-align: center;
+}
+
+.decimator-demo__header a {
+  justify-self: start;
+  color: #fca5a5;
+  font: 850 0.68rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+
+.decimator-demo__header span { display: grid; gap: 0.18rem; }
+.decimator-demo__header small {
+  color: rgba(252, 165, 165, 0.62);
+  font: 900 0.5rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.16em;
+}
+.decimator-demo__header h1 {
+  margin: 0;
+  color: #fff1f2;
+  font: 1000 clamp(1rem, 2.4vw, 1.5rem)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+.decimator-demo__header > b {
+  justify-self: end;
+  padding: 0.3rem 0.48rem;
+  border: 1px solid rgba(250, 204, 21, 0.46);
+  border-radius: 999px;
+  color: #fde68a;
+  font: 900 0.5rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 620px) {
+  .decimator-demo__header {
+    grid-template-columns: 1fr auto;
+    text-align: left;
+  }
+  .decimator-demo__header > a { display: none; }
+}

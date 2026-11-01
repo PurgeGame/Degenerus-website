@@ -1,0 +1,408 @@
+@import url("/app/styles/cache-815754d90ea92a6883e4-bubble-reveal.css?v=touch-layers-20261015");
+@import url("/app/styles/cache-a24f5c159d046a840ffd-dgn-winnings.css?v=currency-right-20261031");
+.rvl-dgn-playback-toggle {
+  min-height: 44px; padding: 9px 18px; border: 1px solid #c1ab7280;
+  border-radius: 8px; background: #252c27; color: #f1dfac;
+  font: 800 .7rem/1.2 system-ui; letter-spacing: .04em;
+  cursor: pointer; touch-action: manipulation;
+}
+.rvl-dgn-playback-toggle:hover { background: #3a4234; }
+.rvl-dgn-playback-toggle:focus-visible { outline: 2px solid #ffe7a5; outline-offset: 3px; }
+/* Shared Degenerette surface: a covered ticket becomes the result in place. */
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop { box-sizing: border-box; width: min(96vw, 1200px); max-width: 1200px; max-height: calc(100dvh - 1rem); padding: 2.6rem .6rem 1rem; color: #f3f4ef; }
+.rvl-stage.rvl-stage--pop > * { flex-shrink: 0; }
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions { position: static; translate: none; transform: none; width: 100%; margin: .5rem auto; }
+.rvl-stage.rvl-stage--pop .rvl-collect-cta { position: static; translate: none; transform: none; margin: .4rem auto; }
+.rvl-stage.rvl-stage--pop .rvl-spin-total { color: #f3f4ef; }
+.rvl-stage.rvl-stage--pop .rvl-spin-total.is-win { color: #7be69f; }
+.rvl-stage--pop .rvl-spin-zone, .rvl-stage--pop .rvl-dgn-stage { width: 100%; max-width: none; }
+.rvl-stage--pop .rvl-spin-head { justify-content: center; }
+.dgn-pop-mount { width: 100%; }
+.dgn-pop { --pop-line: #72817f; --pop-badge-size: 118%; width: 100%; color: #f3f4ef; text-align: center; }
+.dgn-pop [hidden] { display: none !important; }
+.dgn-pop__hint { margin: .6rem 0 1rem; color: #b6c3bc; font: 500 .75rem/1.4 system-ui; }
+.dgn-pop__champion-guide { display: flex; flex: none; justify-content: center; align-items: center; gap: .35rem; margin: -.65rem 0 .75rem; color: #ded4ea; font: 600 .67rem/1.4 system-ui; }
+.dgn-pop__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; width: 100%; margin: auto; }
+.dgn-pop__grid[data-size="1"] { grid-template-columns: minmax(0, 1fr); max-width: min(360px, 72vw); }
+.dgn-pop__grid[data-size="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 620px; }
+.dgn-pop__card { min-width: 0; }
+.dgn-pop__ticket { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); aspect-ratio: 1; gap: 2px; padding: 2px; overflow: hidden; border: 1px solid #a5b4ad; border-radius: 18px; background: var(--pop-line); box-shadow: 0 8px 18px #0005; container-type: inline-size; }
+/* One symmetric seam above the four raised covers, using the flame's center.
+   Separate directional bevels otherwise make the two halves look misaligned. */
+.dgn-pop__ticket::before,
+.dgn-pop__ticket::after { content: ''; position: absolute; z-index: 10; background: #d5e3e4; box-shadow: 0 0 0 1px #62777a; pointer-events: none; }
+.dgn-pop__ticket::before { top: 2px; bottom: 2px; left: 50%; width: 2px; transform: translateX(-50%); }
+.dgn-pop__ticket::after { left: 2px; right: 2px; top: 50%; height: 2px; transform: translateY(-50%); }
+.dgn-pop__cell { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: radial-gradient(ellipse at 40% 28%, #f3f2e9, #d2d9cf 75%); box-shadow: inset 0 2px 3px #fff9, inset 0 -4px 7px #1b2c3544; cursor: pointer; touch-action: manipulation; transition: background-color .15s, box-shadow .15s; }
+.dgn-pop__cell:not(.is-open):hover { filter: brightness(1.05); }
+.dgn-pop__cell:not(.is-open):active { box-shadow: inset 0 3px 12px #243a4270; }
+.dgn-pop__cell:focus-visible, .dgn-pop__flame:focus-visible { outline: 3px solid #fff4aa; outline-offset: -4px; z-index: 12; }
+.dgn-pop__badge { display: block; width: 78%; height: 78%; object-fit: contain; pointer-events: none; border-radius: 50%; }
+.dgn-pop__cell.is-open { background: #34423f; box-shadow: inset 0 2px 9px #0006; cursor: default; }
+/* Circular badge artwork occupies only 70 of its 102 SVG units. Account for
+   that padding so the visible medallion fills most of the quadrant. */
+.dgn-pop__cell.is-open .dgn-pop__badge { position: absolute; top: 50%; left: 50%; translate: -50% -50%; width: var(--pop-badge-size); height: var(--pop-badge-size); max-width: none; background: none; }
+.dgn-pop .bubble-reveal__badge { width: var(--pop-badge-size); height: var(--pop-badge-size); flex-shrink: 0; }
+.dgn-pop__cell[data-points="0"] { background: #8f2038; }
+.dgn-pop__cell[data-points="1"] { background: #1679da; }
+.dgn-pop__cell[data-points="2"] { background: #00a88b; }
+.dgn-pop__cell[data-points="3"] { background: #a137eb; }
+.dgn-pop__cell.is-match { box-shadow: inset 0 0 0 1px #ffffff65, inset 0 0 22px #ffffff22; }
+.dgn-pop__player { position: absolute; width: 42%; height: 42%; right: 3%; bottom: 3%; background: none; border: 0; pointer-events: none; filter: drop-shadow(0 1px 2px #0009); }
+.dgn-pop__player-art { display: block; width: 100%; height: 100%; object-fit: contain; }
+.dgn-pop__player.is-champion { z-index: 3; }
+.dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q2 .dgn-pop__player { left: 3%; right: auto; }
+.dgn-pop__cell--q0 .dgn-pop__player, .dgn-pop__cell--q1 .dgn-pop__player { top: 3%; bottom: auto; }
+/* A shared radial SVG keeps the symbol's center transparent, replacing the
+   rounded CSS shadows on these scaled covers. */
+.dgn-pop__champion { position: absolute; z-index: 5; inset: 0; background: url('/app/assets/degenerette/champion-ring-v1.svg?v=1') center / contain no-repeat; pointer-events: none; }
+.dgn-pop__champion-guide .dgn-pop__champion { position: static; flex: none; width: 22px; height: 22px; margin: 0 1px; }
+/* Match the jackpot's white seal: a fixed, unrotated hit area with its
+   diamond drawn inside, so the flame stays upright at the four-way seam. */
+.dgn-pop__flame { position: absolute; z-index: 15; top: 50%; left: 50%; width: 32%; height: 32%; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%); display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; }
+.dgn-pop__flame::before { content: ''; position: absolute; top: 50%; left: 50%; width: 70.71%; height: 70.71%; box-sizing: border-box; transform: translate(-50%, -50%) rotate(45deg); border: 2px solid #8a8d8f; background: #fff; box-shadow: 0 2px 4px #0002; }
+.dgn-pop__flame { color: #111; container-type: inline-size; transition: color 140ms ease-out; }
+/* The app's delegated press feedback must retain the centering transform.
+   Moving this hit area on pointerdown sends pointerup to a quadrant instead. */
+body.layout-basic .dgn-pop__flame.is-tactile-pressed {
+  transform: translate(-50%, -50%) !important;
+  box-shadow: none !important;
+}
+.dgn-pop__flame-mark { position: relative; z-index: 1; display: block; width: 67%; height: 67%; background: currentColor; mask: url('/whitepaper/flame-center.svg') center / contain no-repeat; pointer-events: none; }
+.dgn-pop__flame:disabled { cursor: default; }
+.dgn-pop__flame:disabled::before { background: #e5ece8; }
+.dgn-pop__flame:not(:disabled):active::before { background: #e2e9eb; }
+
+/* The center follows revealed points, keeping the flame until completion.
+   The flame/number and diamond share contrasting shades of the same hue. */
+.dgn-pop__flame[data-points] { --score-ink: #ffb3be; --score-paper: #80152d; --score-glow: #ff3b64; color: var(--score-ink); opacity: 1; }
+.dgn-pop__flame[data-points="1"] { --score-ink: #c5ddff; --score-paper: #154cba; --score-glow: #509bff; }
+.dgn-pop__flame[data-points="2"] { --score-ink: #c4ecff; --score-paper: #006eae; --score-glow: #19baff; }
+.dgn-pop__flame[data-points="3"] { --score-ink: #b8fbff; --score-paper: #007d91; --score-glow: #20ecff; }
+.dgn-pop__flame[data-points="4"] { --score-ink: #b5ffe2; --score-paper: #00885d; --score-glow: #20ffb6; }
+.dgn-pop__flame[data-points="5"] { --score-ink: #e3ffc1; --score-paper: #407c10; --score-glow: #a4ff3c; }
+.dgn-pop__flame[data-points="6"] { --score-ink: #eddaff; --score-paper: #7925c5; --score-glow: #cc72ff; }
+.dgn-pop__flame[data-points="7"] { --score-ink: #ffd1f5; --score-paper: #ba197f; --score-glow: #ff63cf; }
+.dgn-pop__flame[data-points="8"] { --score-ink: #ffdfba; --score-paper: #b65309; --score-glow: #ff9e32; }
+.dgn-pop__flame[data-points="9"] { --score-ink: #fff4af; --score-paper: #9c6900; --score-glow: #ffdc39; }
+/* Completed 0/1 and nonpaying 2 results have a red center. Partial reveals keep
+   following only the points the player has uncovered. */
+.dgn-pop__flame[data-score="0"],
+.dgn-pop__card:not(.is-paid) .dgn-pop__flame[data-score="2"],
+.dgn-pop__flame[data-score="1"] { --score-ink: #ffb3be; --score-paper: #80152d; --score-glow: #ff3b64; }
+.dgn-pop__flame[data-points]::before { background: var(--score-paper); border-color: var(--score-ink); box-shadow: 0 0 0 2px #09100ed9, 0 0 16px var(--score-glow), inset 0 0 12px #ffffff20; transition: background-color 140ms ease-out, border-color 140ms ease-out; }
+.dgn-pop__flame[data-score]::before { border-width: 3px; box-shadow: 0 0 0 3px #09100ee6, 0 0 22px var(--score-glow), inset 0 0 14px #ffffff30; }
+.dgn-pop__ticket-score { position: relative; z-index: 1; color: #fff; font: 950 clamp(24px, 63cqi, 76px)/1 system-ui; font-variant-numeric: tabular-nums; text-shadow: 0 2px 1px #0009, 0 0 12px var(--score-glow); pointer-events: none; animation: dgn-pop-score 480ms cubic-bezier(.2, .8, .3, 1) both; }
+/* The 1's heavy stem sits right of its advance center; balance its visible
+   weight inside the diamond rather than moving it farther right. */
+.dgn-pop__flame[data-score="1"] .dgn-pop__ticket-score { translate: -.035em -.03em; }
+@keyframes dgn-pop-score { 0% { opacity: 0; scale: .55; } 45% { opacity: 1; scale: 1.25; } 72% { scale: .95; } 100% { scale: 1; } }
+
+/* Each completed paid ticket gets a readable receipt beat, then leaves the
+   amount in its caption. This overlays the art without moving any hit areas. */
+.dgn-pop__payout { position: absolute; z-index: 16; inset: auto 5% 6%; display: grid; gap: 3px; padding: .4em .3em; border: 1px solid #83ffbc; border-radius: 9px; background: #05271af2; color: #baffd6; box-shadow: 0 3px 15px #0009, 0 0 18px #38ff9940; font-size: clamp(.85rem, 8cqi, 1.85rem); pointer-events: none; animation: dgn-pop-payout 4s both; }
+.dgn-pop__payout-amount { font: 950 1em/1.1 system-ui; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; text-shadow: 0 0 12px #38ff9960; }
+.dgn-pop__payout-detail { font: 850 clamp(.4rem, 3.2cqi, .65rem)/1.1 system-ui; letter-spacing: .12em; }
+.dgn-pop__card.is-paid .dgn-pop__ticket { border-color: #83ffbc; box-shadow: 0 0 0 1px #83ffbc70, 0 0 20px #22eb7840, 0 8px 18px #0005; }
+.dgn-pop__card.is-paid .dgn-pop__number { color: #aaffcd; }
+.dgn-pop__card.is-miss .dgn-pop__payout { color: #ffb3be; background: #380b16f2; border-color: #ee5670; box-shadow: 0 3px 15px #0009; }
+.dgn-pop__card.is-miss .dgn-pop__number { color: #ff9eae; }
+@keyframes dgn-pop-payout { 0%, 5% { opacity: 0; transform: translateY(8px) scale(.85); } 13%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-5px); } }
+
+.dgn-pop__increment { position: absolute; inset: 30% 0 auto; color: white; font: 900 clamp(1.25rem, 4vw, 2rem)/1 system-ui; text-shadow: 0 2px 5px #000; pointer-events: none; opacity: 0; }
+.dgn-pop__cell.is-wild { box-shadow: inset 0 0 0 3px #d9dcf2, inset 0 0 14px #9aa7ff80; }
+.dgn-pop__gold-total { min-height: 1.3em; display: block; color: #f4d07c; font: 800 .64rem/1.3 system-ui; }
+/* Reserve the bonus caption so a gold match does not recenter the ticket. */
+.dgn-pop .dgn-pop__gold-total[hidden] { display: block !important; visibility: hidden; }
+.dgn-pop__number { display: block; padding: .4rem 0 .15rem; color: #b6c3bc; font: 800 .58rem/1.4 system-ui; letter-spacing: .13em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dgn-pop__all { position: sticky; bottom: 8px; z-index: 25; min-height: 44px; margin: 1rem auto 0; padding: .65rem 1.7rem; color: #202319; background: #eacc81; border: 1px solid #ffedaf; border-radius: 9px; font: 900 .8rem/1.3 system-ui; letter-spacing: .07em; box-shadow: 0 4px 14px #0006; cursor: pointer; }
+.dgn-pop__all:disabled { opacity: .5; cursor: default; }
+@keyframes dgn-pop-open { from { transform: scale(.86); opacity: .3; } to { transform: scale(1); opacity: 1; } }
+@keyframes dgn-pop-point { 0% { transform: translateY(5px) scale(.8); opacity: 1; } 50% { opacity: 1; } 100% { transform: translateY(-35px) scale(1.1); opacity: 0; } }
+@media (max-width: 620px) { .dgn-pop__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; } .dgn-pop__ticket { border-radius: 12px; } }
+
+@media (prefers-reduced-motion: reduce) { .dgn-pop__cell.is-open .dgn-pop__badge { animation: none; } .dgn-pop__increment { display: none; } .dgn-pop__cell { transition: none; } }
+
+/* One smooth air pocket per quadrant. Only the ticket's outside corners round. */
+.dgn-pop__cell--q0 { border-top-left-radius: 14px; }
+.dgn-pop__cell--q1 { border-top-right-radius: 14px; }
+.dgn-pop__cell--q2 { border-bottom-left-radius: 14px; }
+.dgn-pop__cell--q3 { border-bottom-right-radius: 14px; }
+.dgn-pop__cell.is-match .dgn-pop__badge,
+.dgn-pop__cell.is-match .dgn-pop__player { animation: dgn-pop-match 420ms ease-out both; }
+.dgn-pop__cell.is-match .dgn-pop__increment { animation: dgn-pop-point 650ms ease-out both; }
+@keyframes dgn-pop-match { 0%,100% { scale: 1; } 35% { scale: 1.12; } }
+/* A grouped reveal celebrates the card total once, rather than bouncing every
+   matching symbol and point label at the same time. */
+.dgn-pop__card.is-batch-reveal .dgn-pop__cell { transition: none; }
+.dgn-pop__card.is-batch-reveal .dgn-pop__badge,
+.dgn-pop__card.is-batch-reveal .dgn-pop__player,
+.dgn-pop__card.is-batch-reveal .dgn-pop__increment { animation: none; }
+/* Offscreen results are final when scrolled into view. Their persistent card
+   receipt remains visible; transient popups and score bounces do no work. */
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__ticket-score { animation: none; }
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__payout { display: none; }
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__cell,
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__flame,
+.dgn-pop__card.is-revealed-offscreen .dgn-pop__flame::before { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .dgn-pop__cell.is-match .dgn-pop__badge, .dgn-pop__cell.is-match .dgn-pop__player { animation: none; }
+  .dgn-pop__ticket-score { animation: none; }
+  .dgn-pop__payout { animation: dgn-pop-payout-still 4s both; }
+  .dgn-pop__flame, .dgn-pop__flame[data-points]::before { transition: none; }
+}
+@keyframes dgn-pop-payout-still { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Keep four cards in view; only the ticket region scrolls. The controls stay
+   outside it, so Reveal all never covers a ticket or scrolls out of reach. */
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop {
+  padding-bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));
+  gap: .5rem;
+}
+.rvl-stage.rvl-stage--pop .rvl-spin-zone,
+.rvl-stage.rvl-stage--pop .rvl-dgn-stage,
+.rvl-stage--pop .dgn-pop-mount,
+.rvl-stage--pop .dgn-pop {
+  display: flex; flex-direction: column; flex: 1 1 0; min-height: 0;
+}
+.dgn-pop__viewport { width: 100%; }
+.rvl-stage--pop .dgn-pop__viewport {
+  display: flex; flex-direction: column;
+  flex: 1 1 0; min-height: 0; width: 100%;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges; container-type: size;
+}
+.dgn-pop__viewport:focus-visible { outline: 2px solid #eacc81; outline-offset: 2px; }
+/* Cards size from the viewport that holds them: as large as the width and the
+   visible height allow, capped per count. Auto margins centre the set in both
+   axes and fall back to the top once it has to scroll. */
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid {
+  --gap: .9rem; --label: 2.4rem;
+  --fit-w: calc(100cqw - .5rem); --fit-h: calc(100cqh - .5rem - var(--pop-footer, 0px));
+  --cols: 2; --card: max(110px, min((var(--fit-w) - var(--gap)) / 2, 380px, (var(--fit-h) - 2 * var(--label) - var(--gap)) / 2));
+  box-sizing: border-box; gap: var(--gap); padding: .2rem;
+  width: max-content; max-width: none; margin: auto;
+  grid-template-columns: repeat(var(--cols), var(--card));
+}
+/* The payout bar sits right under the cards: the pair centres as one group,
+   and the bar sticks to the bottom edge once a large bet has to scroll. */
+.rvl-stage--pop .dgn-pop__viewport--winnings { --pop-footer: 104px; }
+.rvl-stage--pop .dgn-pop__viewport--winnings > .dgn-pop__grid { margin: auto auto 0; }
+.rvl-stage--pop .dgn-pop__viewport > .dgn-winnings {
+  position: sticky; bottom: 0; flex-shrink: 0; margin: 8px auto auto;
+}
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="1"] {
+  --cols: 1; --card: max(140px, min(var(--fit-w), 460px, var(--fit-h) - var(--label)));
+}
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="2"] {
+  --card: max(120px, min((var(--fit-w) - var(--gap)) / 2, 420px, var(--fit-h) - var(--label)));
+}
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="3"],
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-layout="mystery"] {
+  --cols: 3; --card: max(110px, min((var(--fit-w) - 2 * var(--gap)) / 3, 380px, var(--fit-h) - var(--label)));
+}
+.rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="9"] {
+  --cols: 3; --card: max(110px, min((var(--fit-w) - 2 * var(--gap)) / 3, 320px));
+}
+/* Past about 9:5 a single row of four beats a 2x2 that the height squeezes. */
+@container (min-aspect-ratio: 9 / 5) {
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="4"] {
+    --cols: 4; --card: max(110px, min((var(--fit-w) - 3 * var(--gap)) / 4, 380px, var(--fit-h) - var(--label)));
+  }
+}
+/* A mystery card holds the centre slot of a three-slot frame from the start;
+   a FLIP lane's bonus cards open into the slots on either side of it. */
+.rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card { grid-row: 1; }
+.rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card:nth-child(1) { grid-column: 2; position: relative; z-index: 2; }
+.rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card:nth-child(2) { grid-column: 1; --arrive-x: 62%; }
+.rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card:nth-child(3) { grid-column: 3; --arrive-x: -62%; }
+@container (max-width: 600px) {
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="3"],
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size="9"] {
+    --cols: 2; --card: max(110px, min((var(--fit-w) - var(--gap)) / 2, 300px));
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-size="3"]:not([data-layout]) > .dgn-pop__card:nth-child(3) {
+    grid-column: 1 / -1; justify-self: center; width: var(--card);
+  }
+  /* Phones: card 1 on top, the bonus pair side by side beneath it. A lone
+     card keeps the full single-card size and eases down when the pair lands. */
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-layout="mystery"] {
+    --cols: 2; --card: max(100px, min((var(--fit-w) - var(--gap)) / 2, 260px, (var(--fit-h) - 2 * var(--label) - var(--gap)) * .45));
+    --solo: max(140px, min(var(--fit-w), 460px, var(--fit-h) - var(--label)));
+    --hero: max(120px, min(2 * var(--card) + var(--gap), 340px, var(--fit-h) - 2 * var(--label) - var(--gap) - var(--card)));
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card:nth-child(1) {
+    grid-column: 1 / -1; justify-self: center; width: var(--hero); transition: width 380ms ease;
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"][data-size="1"] > .dgn-pop__card:nth-child(1) { width: var(--solo); }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card:nth-child(2) { grid-row: 2; grid-column: 1; --arrive-x: 0%; --arrive-y: -45%; }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card:nth-child(3) { grid-row: 2; grid-column: 2; --arrive-x: 0%; --arrive-y: -45%; }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"][data-size="1"] { grid-template-columns: var(--solo); }
+}
+.dgn-pop__card.is-arriving { animation: dgn-pop-arrive 520ms cubic-bezier(.2, .9, .25, 1.12) both; }
+.dgn-pop__card--bonus:nth-child(3).is-arriving { animation-delay: 110ms; }
+@keyframes dgn-pop-arrive {
+  from { opacity: 0; transform: translate(var(--arrive-x, 0%), var(--arrive-y, 0%)) scale(.7); }
+  to { opacity: 1; transform: none; }
+}
+.dgn-pop__bonus-tag { display: inline-block; margin-right: .45em; padding: 0 .4em; border-radius: 3px; color: #202319; background: #eacc81; letter-spacing: .1em; }
+@media (prefers-reduced-motion: reduce) {
+  .dgn-pop__card.is-arriving { animation: none; }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"] > .dgn-pop__card:nth-child(1) { transition: none; }
+}
+.rvl-stage--pop .dgn-pop__all,
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed {
+  position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%); margin: 0;
+  width: max-content; max-width: calc(100% - 1rem);
+  /* One row: the terminal action with Share beside it, inside the 4rem band. */
+  display: flex; justify-content: center; gap: .6rem;
+}
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed > * { width: auto; min-width: 9.5rem; margin: 0; white-space: nowrap; }
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed > .dgn-pop__all {
+  position: static; transform: none; min-width: 0; min-height: 44px;
+  padding: .45rem .8rem; font: 800 .7rem/1.15 system-ui;
+}
+.rvl-dgn-actions--fixed > button[hidden] { display: none !important; }
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed:has(> .rvl-dgn-playback-toggle) {
+  width: min(26rem, calc(100% - 1rem));
+}
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed > :is(.rvl-dgn-playback-toggle, .dgn-pop__all) {
+  flex: 1; min-width: 0; padding-inline: .6rem; white-space: normal;
+}
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed:has(> .rvl-share-cta) > * { min-width: 0; padding-inline: 1rem; }
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed > .rvl-share-cta {
+  position: static; transform: none; margin: 0; min-height: 44px;
+  padding: .5rem 1rem; font-size: .7rem; white-space: nowrap;
+}
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--batch-result {
+  width: min(26rem, calc(100% - 1.5rem));
+}
+.rvl-stage.rvl-stage--pop .rvl-dgn-actions--batch-result > button {
+  flex: 1; min-width: 0; min-height: 44px; padding-inline: .75rem;
+}
+.rvl-dgn-actions--batch-result .rvl-dgn-batch-pause { order: -1; }
+.is-batch-result .dgn-winnings {
+  border-color: #d1b675; background: linear-gradient(145deg, #25382b, #101a14);
+}
+.is-batch-result .dgn-winnings__label { color: #ffe2a0; }
+.is-batch-result .dgn-winnings__status { color: #d1ddcd; }
+.rvl-stage--pop .dgn-pop__all { z-index: 35; }
+/* Outranks the box-spin .8rem band in app.css: one 44px control row fits in 4rem. */
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop {
+  padding-bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));
+}
+.rvl-stage.rvl-stage--degenerette.rvl-stage--pop .rvl-dgn-stage {
+  position: static; width: 100%; max-width: 100%;
+}
+.rvl-stage.rvl-stage--pop .rvl-share-cta {
+  position: absolute; bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));
+  min-height: 28px; padding: .25rem .75rem; font-size: .65rem; white-space: nowrap;
+  left: 50%; transform: translateX(-50%); margin: 0;
+}
+
+/* Phone reveals use two repeatable ticket sizes and at most four cards per
+   page. The whole receipt has an intrinsic height; no full-screen stretch or
+   inner scrolling separates the tickets from their payout and next action. */
+.dgn-pop__pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dgn-pop__pager button {
+  min-width: 64px; min-height: 44px; padding: 0 8px;
+  border: 1px solid #82948b66; border-radius: 8px;
+  background: #1a2825; color: #ecdfb9; font: 750 .75rem/1 system-ui;
+  cursor: pointer; touch-action: manipulation;
+}
+.dgn-pop__pager button:disabled { opacity: .35; cursor: default; }
+.dgn-pop__pager button:focus-visible { outline: 2px solid #eacc81; outline-offset: 2px; }
+.dgn-pop__page-label { color: #bbc8bf; font: 750 .65rem/1.3 system-ui; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 768px), (max-width: 1000px) and (max-height: 500px) {
+  .rvl-backdrop:has(.rvl-stage--pop) {
+    padding-top: max(60px, calc(env(safe-area-inset-top) + 52px));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .rvl-stage--pop > .rvl-title { display: none; }
+  .rvl-stage.rvl-stage--degenerette.rvl-stage--pop {
+    width: min(calc(100vw - 1rem), 368px); height: auto;
+    max-height: calc(100dvh - 68px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: .4rem .5rem 3.75rem; gap: .35rem; overflow: visible;
+  }
+  .rvl-stage.rvl-stage--pop .rvl-spin-zone,
+  .rvl-stage.rvl-stage--pop .rvl-dgn-stage,
+  .rvl-stage--pop .dgn-pop-mount { flex: none; gap: .35rem; }
+  .rvl-stage--pop .rvl-spin-head { font-size: .78rem; }
+  .rvl-stage--pop .dgn-pop {
+    display: grid; flex: none; grid-template-columns: auto auto;
+    align-items: center; justify-content: stretch; gap: 6px 8px;
+  }
+  .rvl-stage--pop .dgn-pop__hint,
+  .rvl-stage--pop .dgn-pop__champion-guide { margin: 0; font-size: .6rem; white-space: nowrap; }
+  .rvl-stage--pop .dgn-pop__champion-guide { gap: 2px; }
+  .rvl-stage--pop .dgn-pop__champion-guide .dgn-pop__champion { width: 18px; height: 18px; }
+  .rvl-stage--pop .dgn-pop__pager { grid-column: 1 / -1; width: 100%; }
+  .rvl-stage--pop .dgn-pop__viewport {
+    grid-column: 1 / -1; flex: none; container-type: normal;
+    overflow: visible; scrollbar-gutter: auto; min-width: 0;
+  }
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --gap: 8px; --cols: 2;
+    --card: min(160px, (100vw - 48px) / 2, (100dvh - 360px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+    grid-template-columns: repeat(var(--cols), var(--card));
+    gap: var(--gap); width: max-content; padding: 2px; margin: 0 auto;
+  }
+  .rvl-stage--pop .dgn-pop[data-ticket-size="single"] .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --cols: 1; --card: min(300px, 100vw - 40px, 100dvh - 320px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .rvl-stage--pop .dgn-pop:not([data-pages="1"]) .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --card: min(160px, (100vw - 48px) / 2, (100dvh - 410px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+    min-height: calc(2 * (var(--card) + 30px) + var(--gap) + 4px);
+    align-items: start;
+  }
+  /* The last page keeps the batch's small size, even with one card left. */
+  .rvl-stage--pop .dgn-pop__grid[data-size="1"] > .dgn-pop__card {
+    grid-column: 1 / -1; justify-self: center; width: var(--card);
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-size="3"]:not([data-layout]) > .dgn-pop__card:nth-child(3) {
+    grid-column: 1 / -1; justify-self: center; width: var(--card);
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"][data-size] > .dgn-pop__card {
+    width: var(--card); grid-row: auto; grid-column: auto; transition: none;
+    --arrive-x: 0%; --arrive-y: -15%;
+  }
+  .rvl-stage--pop .dgn-pop__grid[data-layout="mystery"][data-size] > .dgn-pop__card:first-child {
+    grid-column: 1 / -1; justify-self: center;
+  }
+  /* Compact, fixed captions keep the targets still as scores and wilds land. */
+  .rvl-stage--pop .dgn-pop__number { padding: 4px 0 1px; font-size: .55rem; }
+  .rvl-stage--pop .dgn-pop__gold-total { height: 12px; min-height: 12px; font-size: .57rem; white-space: nowrap; }
+  .rvl-stage--pop .dgn-pop__viewport > .dgn-winnings {
+    position: relative; bottom: auto; width: min(100%, 340px); margin: 6px auto 0;
+  }
+  .rvl-stage--pop .dgn-pop__all,
+  .rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed { bottom: .4rem; }
+  .rvl-stage--pop .dgn-pop__all { min-height: 44px; padding: .6rem 1.4rem; }
+}
+
+/* Sideways, the payout sits beside the cards instead of consuming their height. */
+@media (min-width: 600px) and (max-width: 1000px) and (max-height: 500px) {
+  .rvl-stage.rvl-stage--degenerette.rvl-stage--pop { width: min(calc(100vw - 1rem), 660px); padding-bottom: 0; }
+  .rvl-stage--pop .dgn-pop__hint,
+  .rvl-stage--pop .dgn-pop__champion-guide { display: none; }
+  .rvl-stage--pop .dgn-pop__viewport { display: grid; grid-template-columns: auto 260px; align-items: center; gap: 16px; }
+  .rvl-stage--pop .dgn-pop__viewport .dgn-pop__grid[data-size],
+  .rvl-stage--pop .dgn-pop:not([data-pages="1"]) .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --cols: 2; --card: min(124px, (100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+    min-height: 0;
+  }
+  .rvl-stage--pop .dgn-pop:not([data-pages="1"]) .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    min-height: calc(2 * (var(--card) + 30px) + var(--gap) + 4px);
+  }
+  .rvl-stage--pop .dgn-pop[data-ticket-size="single"] .dgn-pop__viewport .dgn-pop__grid[data-size] {
+    --card: min(200px, 100dvh - 150px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .rvl-stage--pop .dgn-pop__viewport > .dgn-winnings { margin: 0 0 56px; }
+  .rvl-stage--pop .dgn-pop__all,
+  .rvl-stage.rvl-stage--pop .rvl-dgn-actions--fixed {
+    left: auto; right: 8px; bottom: max(6px, calc((100% - 248px) / 2));
+    width: 260px; max-width: 260px; transform: none;
+  }
+}

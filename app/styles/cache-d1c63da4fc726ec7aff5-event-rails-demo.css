@@ -1,0 +1,76 @@
+.event-rails-demo-page {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 22% -12%, rgba(37, 99, 235, 0.24), transparent 34rem),
+    radial-gradient(circle at 82% 105%, rgba(127, 29, 29, 0.22), transparent 36rem),
+    #07080d;
+}
+
+.event-rails-demo {
+  box-sizing: border-box;
+  width: min(72rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 3rem) clamp(0.65rem, 2vw, 1.4rem);
+}
+
+.event-rails-demo__header {
+  display: grid;
+  grid-template-columns: minmax(4rem, 1fr) auto minmax(4rem, 1fr);
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: clamp(1.2rem, 4vw, 2.5rem);
+  color: #dbeafe;
+  text-align: center;
+}
+
+.event-rails-demo__header a {
+  justify-self: start;
+  color: #93c5fd;
+  font: 850 0.68rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+
+.event-rails-demo__header span { display: grid; gap: 0.18rem; }
+.event-rails-demo__header small {
+  color: rgba(147, 197, 253, 0.55);
+  font: 900 0.5rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.16em;
+}
+.event-rails-demo__header h1 {
+  margin: 0;
+  color: #f8fafc;
+  font: 1000 clamp(1rem, 2.4vw, 1.5rem)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+.event-rails-demo__header > b {
+  justify-self: end;
+  padding: 0.3rem 0.48rem;
+  border: 1px solid rgba(250, 204, 21, 0.46);
+  border-radius: 999px;
+  color: #fde68a;
+  font: 900 0.5rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.event-rails-demo__stage { margin: 0 0 clamp(1.4rem, 4vw, 2.7rem); }
+.event-rails-demo__resolution-link { margin: -1.3rem 0 1.1rem; text-align: center; }
+.event-rails-demo__resolution-link a { color: #93c5fd; font: 900 0.55rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.08em; text-decoration: none; }
+.event-rails-demo__stage > p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 0.45rem;
+  padding: 0 0.18rem;
+  color: rgba(191, 219, 254, 0.56);
+  font: 900 0.5rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.12em;
+}
+.event-rails-demo__stage > p b { color: rgba(226, 232, 240, 0.44); font: inherit; }
+.event-rails-demo__stage--decimator > p { color: rgba(252, 165, 165, 0.62); }
+
+@media (max-width: 620px) {
+  .event-rails-demo__header { grid-template-columns: 1fr auto; text-align: left; }
+  .event-rails-demo__header > a { display: none; }
+}

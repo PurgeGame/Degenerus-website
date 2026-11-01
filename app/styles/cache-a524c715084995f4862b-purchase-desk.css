@@ -1,0 +1,4292 @@
+/* BUY IN / purchase desk
+   ----------------------
+   The quiet counter of the hero: oxblood felt, aged brass, and one family of
+   green-LED glass readouts (price window, dormant bonus window, funds ledger).
+   Between two loud machines this column stays restrained on purpose — the only
+   ornament is the house seal pressed tonally into the felt of the flexible
+   middle. Cues stay abstract so the form still belongs beside the drawing
+   machine and Community Coinflip instead of turning into a themed prop. */
+
+body.layout-basic .jackpot-hero > app-decimator-panel {
+  --dec-desk-ivory: #fff2cf;
+  --dec-desk-claret: #210b11;
+  --dec-desk-ink: #09070c;
+}
+
+.app-decimator-panel {
+  --dec-clear-column: 3.1rem;
+  --dec-order-gap: 0.3rem;
+  --dec-control-height: 2.55rem;
+}
+
+@media (max-width: 1099px) {
+  .app-decimator-panel { --dec-clear-column: 3rem; --dec-control-height: 3rem; }
+}
+
+/* The decorative seal spacer + dormant bonus window exist only as art for
+   this sheet. Outside the basic layout they must never paint (deliberate
+   namespace exception: this is the off-switch that keeps them inert). */
+.app-decimator-panel .dec-desk-cage,
+.app-decimator-panel .dec-desk-bonus-slot {
+  display: none;
+}
+
+body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel {
+  background:
+    linear-gradient(90deg, rgba(255, 233, 190, 0.018) 1px, transparent 1px) 0 0 / 11px 100%,
+    repeating-linear-gradient(45deg, rgba(255, 226, 178, 0.012) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 4px),
+    radial-gradient(90% 38% at 50% 0%, rgba(176, 91, 32, 0.18), transparent 72%),
+    radial-gradient(72% 54% at 50% 47%, rgba(100, 45, 75, 0.09), transparent 76%),
+    radial-gradient(130% 74% at 50% 46%, transparent 58%, rgba(0, 0, 0, 0.36)),
+    linear-gradient(180deg, var(--dec-desk-claret) 0%, #100a12 47%, var(--dec-desk-ink) 100%);
+  box-shadow:
+    inset 1px 0 0 rgba(255, 217, 146, 0.1),
+    inset 0 1px 0 rgba(255, 237, 201, 0.055),
+    inset 0 -28px 42px rgba(0, 0, 0, 0.3);
+}
+
+/* The base watermark flame is retired — the pressed seal below owns the
+   panel's one emblem. */
+body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::before {
+  content: none;
+}
+
+body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::after {
+  top: 0.8rem;
+  bottom: 0.8rem;
+  left: 0.22rem;
+  width: 1px;
+  background: linear-gradient(transparent, rgba(241, 207, 131, 0.7) 12%, rgba(153, 94, 24, 0.4) 72%, transparent);
+  box-shadow: 2px 0 7px rgba(199, 148, 63, 0.12);
+}
+
+/* Headline rail: the neighboring hero widgets both use a centered two-level
+   lockup. BUY IN keeps its plain accessible h2 while CSS supplies the smaller
+   house line and the flanking brass rules. */
+body.layout-basic .app-decimator-panel .panel-header {
+  position: relative;
+  display: grid;
+  height: auto;
+  min-height: 4.45rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  gap: 0.42rem;
+  padding: 0.48rem 0.56rem 0.5rem;
+  overflow: hidden;
+  border: 1px solid rgba(214, 166, 83, 0.42);
+  border-radius: 8px 8px 5px 5px;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 221, 154, 0.05) 48%, transparent),
+    linear-gradient(180deg, rgba(75, 26, 22, 0.84), rgba(23, 10, 15, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 233, 187, 0.14),
+    inset 0 -1px 0 rgba(63, 24, 8, 0.72),
+    0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+body.layout-basic .app-decimator-panel .panel-header::after {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0;
+  left: 0.45rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(241, 207, 131, 0.52), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title::before,
+body.layout-basic .app-decimator-panel .dec-header-title::after {
+  height: 1px;
+  flex: 1 1 1.8rem;
+  background: linear-gradient(90deg, transparent, rgba(215, 169, 88, 0.5));
+  content: '';
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title::after {
+  margin-right: 1.55rem;
+  background: linear-gradient(90deg, rgba(215, 169, 88, 0.5), transparent);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-heading {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.13rem;
+  place-items: center;
+  color: var(--dec-desk-ivory);
+  font-size: clamp(1.02rem, 2.65vw, 1.2rem);
+  font-weight: 950;
+  letter-spacing: 0.17em;
+  line-height: 0.94;
+  text-indent: 0.17em;
+  text-shadow: 0 1px 0 #050203, 0 0 9px rgba(240, 183, 77, 0.22);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-heading::before {
+  color: rgba(225, 192, 125, 0.66);
+  content: 'DEGENERUS';
+  font-size: 0.4rem;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  line-height: 1;
+  text-indent: 0.28em;
+  text-shadow: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-help {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 1.32rem;
+  height: 1.32rem;
+  margin: 0;
+  border-color: rgba(225, 185, 108, 0.46);
+  background: rgba(6, 4, 7, 0.3);
+  color: #e8c77f;
+  box-shadow: inset 0 0 0 1px rgba(255, 238, 204, 0.025);
+  transform: translateY(-50%);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-help:hover {
+  border-color: rgba(249, 216, 149, 0.8);
+  background: rgba(150, 83, 20, 0.28);
+  transform: translateY(calc(-50% - 1px));
+}
+
+/* Rate window: first of the panel's green-LED glass readouts (the dormant
+   bonus window and funds ledger repeat the same glass-in-brass-bezel
+   language). */
+body.layout-basic .app-decimator-panel .dec-price {
+  box-sizing: border-box;
+  width: min(11.4rem, calc(100% - 1rem));
+  justify-self: center;
+  padding: 0.28rem 0.72rem 0.25rem;
+  overflow: hidden;
+  border: 1px solid rgba(118, 159, 128, 0.38);
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    #08100d;
+  color: #cce9d1;
+  box-shadow:
+    0 0 0 1px rgba(124, 88, 34, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.64),
+    inset 0 0 9px rgba(81, 190, 112, 0.04);
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.61rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 5px rgba(115, 223, 147, 0.18);
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-row--pair {
+  gap: 0.46rem;
+  margin-top: 0.02rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group {
+  min-height: 3.18rem;
+  padding: 0.42rem 0.46rem 0.42rem 0.7rem;
+  border-color: rgba(205, 157, 77, 0.4);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(255, 220, 150, 0.055), transparent 48%),
+    linear-gradient(180deg, rgba(68, 35, 17, 0.64), rgba(16, 11, 14, 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 234, 190, 0.1),
+    inset 0 -1px 0 rgba(52, 25, 8, 0.72),
+    0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group::before {
+  right: 0.55rem;
+  left: 0.55rem;
+  background: linear-gradient(90deg, transparent, rgba(236, 192, 108, 0.7), transparent);
+  opacity: 0.46;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group::after {
+  top: 0.48rem;
+  bottom: 0.48rem;
+  width: 2px;
+  background: linear-gradient(#f5d994, #b97921 58%, #74400e);
+  box-shadow: 0 0 7px rgba(221, 166, 66, 0.25);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox {
+  border-color: rgba(157, 129, 194, 0.36);
+  background:
+    linear-gradient(90deg, rgba(184, 153, 224, 0.055), transparent 48%),
+    linear-gradient(180deg, rgba(53, 36, 67, 0.68), rgba(15, 11, 18, 0.9));
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox::before {
+  background: linear-gradient(90deg, transparent, rgba(195, 166, 226, 0.62), transparent);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox::after {
+  background: linear-gradient(#decdf2, #9e78c8 58%, #58386f);
+  box-shadow: 0 0 7px rgba(176, 137, 215, 0.24);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group:hover {
+  border-color: rgba(232, 188, 108, 0.62);
+  background:
+    linear-gradient(90deg, rgba(255, 222, 158, 0.08), transparent 52%),
+    linear-gradient(180deg, rgba(78, 40, 18, 0.7), rgba(18, 12, 15, 0.92));
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox:hover {
+  border-color: rgba(190, 158, 226, 0.58);
+  background:
+    linear-gradient(90deg, rgba(196, 166, 230, 0.08), transparent 52%),
+    linear-gradient(180deg, rgba(61, 41, 75, 0.74), rgba(17, 12, 20, 0.92));
+}
+
+body.layout-basic .app-decimator-panel .dec-input-label,
+body.layout-basic .app-decimator-panel .dec-input-group--tickets .dec-input-label {
+  color: #e9cd92;
+  font-size: clamp(0.69rem, 1.45vw, 0.75rem);
+  letter-spacing: 0.095em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-input-label {
+  color: #cdb9e2;
+}
+
+body.layout-basic .app-decimator-panel .dec-stepper {
+  width: 6.75rem;
+  flex-basis: 6.75rem;
+  border-color: rgba(220, 177, 98, 0.38);
+  border-radius: 5px;
+  background: #09080b;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 210, 0.045),
+    inset 0 0 10px rgba(183, 121, 27, 0.035),
+    0 2px 7px rgba(0, 0, 0, 0.34);
+}
+
+body.layout-basic .app-decimator-panel .dec-stepper .dec-input {
+  padding-inline: 0.24rem;
+  color: #fff4da;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.92rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 5px rgba(238, 196, 113, 0.14);
+}
+
+body.layout-basic .app-decimator-panel .dec-input-accessories {
+  right: 7.5rem;
+  width: 2.7rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-step,
+body.layout-basic .app-decimator-panel .dec-quarter-step {
+  border-color: rgba(218, 173, 90, 0.25);
+  background: linear-gradient(180deg, rgba(218, 171, 84, 0.2), rgba(82, 45, 11, 0.16));
+  color: #eed09a;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-step {
+  border-color: rgba(183, 151, 219, 0.25);
+  background: linear-gradient(180deg, rgba(179, 146, 216, 0.19), rgba(70, 43, 91, 0.16));
+  color: #d8c6ea;
+}
+
+/* ------------------------------------------------------------------ */
+/* Visual order builders                                               */
+/* ------------------------------------------------------------------ */
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > [data-bind="dec-purchase-quest-effect"] {
+  grid-row: 4;
+  color: #b9f6d1;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builders {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.58rem;
+  min-width: 0;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builder {
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.58rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-title {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-title > strong {
+  color: #f2d494;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.13em;
+  line-height: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-builder-title > strong {
+  color: #dac6ed;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-title > small {
+  overflow: hidden;
+  color: rgba(242, 221, 179, 0.58);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-builder-title > small {
+  color: rgba(220, 202, 236, 0.58);
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-head .dec-input-accessories {
+  position: static;
+  display: flex;
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.18rem;
+  transform: none;
+}
+
+/* Entry / Ticket / Pack act like physical chips: tapping adds their printed
+   value to the editable total below, while the input remains the precise and
+   keyboard-friendly route. */
+body.layout-basic .app-decimator-panel .dec-ticket-pieces {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.38rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece {
+  display: grid;
+  min-width: 0;
+  min-height: 5.25rem;
+  padding: 0.48rem 0.25rem 0.4rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.34rem;
+  border: 1px solid rgba(226, 181, 94, 0.32);
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(255, 236, 196, 0.08), transparent 42%),
+    rgba(8, 7, 9, 0.56);
+  color: #f4dca7;
+  box-shadow: inset 0 1px 0 rgba(255, 241, 211, 0.06), 0 2px 7px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:hover,
+body.layout-basic .app-decimator-panel .dec-ticket-piece:focus-visible {
+  border-color: rgba(248, 211, 141, 0.8);
+  background:
+    linear-gradient(180deg, rgba(255, 238, 198, 0.14), transparent 48%),
+    rgba(76, 40, 14, 0.5);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:active {
+  transform: translateY(1px);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art {
+  position: relative;
+  display: grid;
+  width: min(3.35rem, 88%);
+  height: 1.9rem;
+  place-items: center;
+  border: 1px solid #e3b967;
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 16% 50%, #341b0b 0 2px, transparent 2.5px),
+    radial-gradient(circle at 84% 50%, #341b0b 0 2px, transparent 2.5px),
+    linear-gradient(135deg, #7b4215, #e5b866 48%, #8b501d);
+  box-shadow: inset 0 0 0 2px rgba(67, 34, 8, 0.28), 0 3px 7px rgba(0, 0, 0, 0.32);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > span {
+  width: 58%;
+  height: 48%;
+  border: 1px solid rgba(69, 36, 9, 0.56);
+  border-radius: 2px;
+  background: url('/whitepaper/flame-center.svg') center / 0.72rem no-repeat;
+  opacity: 0.78;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__art {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 5px 5px 10px 5px;
+  transform: rotate(-4deg);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__art::after {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  color: #522b0c;
+  content: '¼';
+  font: 950 0.7rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--pack .dec-ticket-piece__art {
+  transform: rotate(-1deg);
+  box-shadow:
+    3px 3px 0 #5c3111,
+    6px 6px 0 rgba(211, 158, 67, 0.55),
+    inset 0 0 0 2px rgba(67, 34, 8, 0.28),
+    0 4px 8px rgba(0, 0, 0, 0.34);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__copy {
+  display: grid;
+  gap: 0.09rem;
+  min-width: 0;
+  text-align: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__copy > strong {
+  overflow: hidden;
+  font-size: 0.61rem;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-overflow: ellipsis;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__copy > small {
+  color: #f2be58;
+  font: 850 0.58rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total {
+  display: grid;
+  grid-template-columns: auto minmax(5.2rem, 1fr) auto;
+  align-items: center;
+  gap: 0.42rem;
+  margin-top: 0.48rem;
+  padding-top: 0.48rem;
+  border-top: 1px solid rgba(225, 180, 94, 0.2);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__label {
+  color: rgba(245, 220, 170, 0.68);
+  font-size: 0.53rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 2.35rem;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(222, 176, 93, 0.42);
+  border-radius: 5px;
+  background: #08080a;
+  box-shadow: inset 0 0 9px rgba(211, 148, 48, 0.04);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field .dec-input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0.36rem 0.42rem;
+  border: 0;
+  background: transparent;
+  color: #fff1d1;
+  font: 800 0.9rem/1 "Roboto Mono", ui-monospace, monospace;
+  text-align: right;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field > strong {
+  padding-right: 0.42rem;
+  color: #b68d46;
+  font-size: 0.52rem;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-clear {
+  min-width: 2.8rem;
+  min-height: 2.35rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(220, 175, 91, 0.26);
+  border-radius: 5px;
+  background: rgba(8, 7, 9, 0.48);
+  color: rgba(241, 211, 153, 0.72);
+  font-size: 0.48rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  cursor: pointer;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-clear:hover,
+body.layout-basic .app-decimator-panel .dec-ticket-clear:focus-visible {
+  border-color: rgba(244, 208, 137, 0.72);
+  color: #ffedc5;
+  outline: none;
+}
+
+/* The three presets share one visual grammar. Their case art scales up with
+   the 1x / 5x / 25x tier, and each card owns a visible quantity field. */
+body.layout-basic .app-decimator-panel .dec-box-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.86fr) minmax(0, 1.34fr);
+  gap: 0.35rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(181, 147, 217, 0.3);
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 50% 25%, rgba(170, 127, 212, 0.12), transparent 52%),
+    rgba(7, 6, 10, 0.62);
+  box-shadow: inset 0 1px 0 rgba(240, 224, 255, 0.04), 0 2px 7px rgba(0, 0, 0, 0.22);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card.is-selected {
+  border-color: rgba(221, 191, 247, 0.78);
+  box-shadow: inset 0 0 12px rgba(164, 107, 213, 0.1), 0 0 12px rgba(166, 116, 211, 0.14);
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__add {
+  display: grid;
+  min-width: 0;
+  min-height: 5.3rem;
+  padding: 0.34rem 0.18rem 0.3rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.18rem;
+  border: 0;
+  background: transparent;
+  color: #e5d6f1;
+  cursor: pointer;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__add:hover,
+body.layout-basic .app-decimator-panel .dec-box-card__add:focus-visible {
+  background: rgba(189, 148, 225, 0.07);
+  outline: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 2.5rem;
+  place-items: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art img {
+  display: block;
+  width: 78%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.58));
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card--medium .dec-box-card__art img { width: 89%; }
+body.layout-basic .app-decimator-panel .dec-box-card--large .dec-box-card__art img { width: 100%; }
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > span {
+  position: absolute;
+  top: -0.08rem;
+  right: 0.08rem;
+  display: grid;
+  min-width: 1.22rem;
+  height: 1.22rem;
+  padding: 0 0.16rem;
+  place-items: center;
+  border: 1px solid rgba(231, 209, 248, 0.66);
+  border-radius: 999px;
+  background: #5d397a;
+  color: #fff2ff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.42);
+  font: 900 0.48rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.06rem;
+  text-align: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__copy > strong {
+  overflow: hidden;
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-overflow: ellipsis;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__copy > small {
+  overflow: hidden;
+  color: #bca3d2;
+  font: 750 0.47rem/1.15 "Roboto Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-quantity {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 2rem;
+  min-width: 0;
+  min-height: 2.15rem;
+  align-items: stretch;
+  border-top: 1px solid rgba(186, 151, 218, 0.22);
+  background: rgba(4, 4, 7, 0.7);
+}
+
+body.layout-basic .app-decimator-panel .dec-box-quantity > button {
+  min-width: 0;
+  min-height: 2.15rem;
+  padding: 0;
+  border: 0;
+  background: rgba(142, 99, 181, 0.08);
+  color: #d7c2e9;
+  font: 800 1rem/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-quantity > button:hover,
+body.layout-basic .app-decimator-panel .dec-box-quantity > button:focus-visible {
+  background: rgba(172, 126, 212, 0.22);
+  color: #fff;
+  outline: 1px solid rgba(224, 194, 248, 0.48);
+  outline-offset: -1px;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-quantity > input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.25rem 0.12rem;
+  border: 0;
+  border-right: 1px solid rgba(186, 151, 218, 0.18);
+  border-left: 1px solid rgba(186, 151, 218, 0.18);
+  border-radius: 0;
+  background: #08070b;
+  color: #f5eaff;
+  font: 800 0.74rem/1 "Roboto Mono", ui-monospace, monospace;
+  text-align: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
+  display: grid;
+  width: 100%;
+  min-height: 3.15rem;
+  grid-template-columns: 1.9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.42rem;
+  margin-top: 0.42rem;
+  padding: 0.38rem 0.48rem;
+  border: 1px solid rgba(183, 148, 216, 0.28);
+  border-radius: 6px;
+  background: rgba(8, 6, 11, 0.58);
+  color: #d9c4e9;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle:hover,
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle:focus-visible,
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle.is-selected {
+  border-color: rgba(219, 188, 244, 0.7);
+  background: rgba(102, 68, 131, 0.28);
+  outline: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__mark {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: 1px solid rgba(206, 175, 232, 0.42);
+  border-radius: 5px;
+  background: rgba(142, 94, 180, 0.14);
+  color: #ead9f7;
+  font-size: 1rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle strong {
+  font-size: 0.59rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle small {
+  overflow: hidden;
+  color: rgba(218, 198, 233, 0.6);
+  font-size: 0.51rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__chevron {
+  font-size: 1rem;
+  transition: transform 0.14s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle[aria-expanded="true"] .dec-custom-box-toggle__chevron {
+  transform: rotate(180deg);
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 0.4rem;
+  margin-top: 0.36rem;
+  padding: 0.45rem;
+  border: 1px solid rgba(185, 151, 217, 0.24);
+  border-radius: 6px;
+  background: rgba(5, 4, 8, 0.52);
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-fields[hidden] {
+  display: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-fields > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.24rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-fields > div > label {
+  color: rgba(218, 198, 233, 0.62);
+  font-size: 0.48rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-control {
+  min-height: 2.35rem;
+  overflow: hidden;
+  border: 1px solid rgba(186, 151, 218, 0.3);
+  border-radius: 5px;
+  background: #08070b;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-control--size {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-control--size > input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.42rem 0.28rem;
+  border: 0;
+  background: transparent;
+  color: #f5eaff;
+  font: 800 0.68rem/1 "Roboto Mono", ui-monospace, monospace;
+  text-align: right;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-control--size > strong {
+  padding-right: 0.34rem;
+  color: #a98dc0;
+  font-size: 0.47rem;
+  letter-spacing: 0.05em;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-summary {
+  min-height: 0.75rem;
+  margin: 0.38rem 0 0;
+  color: rgba(222, 205, 237, 0.7);
+  font: 700 0.54rem/1.3 "Roboto Mono", ui-monospace, monospace;
+  text-align: right;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-summary.is-error {
+  color: #fca5a5;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builder.has-error {
+  border-color: rgba(248, 113, 113, 0.68);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builder input[aria-invalid="true"] {
+  color: #fecaca;
+  outline: 1px solid rgba(248, 113, 113, 0.7);
+  outline-offset: -1px;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builder.is-bounty-trigger,
+body.layout-basic .app-decimator-panel .dec-purchase-builder:has(.is-bounty-trigger) {
+  box-shadow: inset 0 0 14px rgba(250, 204, 21, 0.08), 0 0 12px rgba(250, 204, 21, 0.11);
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builder button:disabled,
+body.layout-basic .app-decimator-panel .dec-purchase-builder input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* The action rail is the counter lip: one thin brass rule, then the BONUS
+   window / BUY IN key pair. */
+body.layout-basic .app-decimator-panel .dec-buy-row {
+  position: relative;
+  margin-top: 0.12rem;
+  padding-top: 0.55rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row::before {
+  position: absolute;
+  top: 0.12rem;
+  right: 0.12rem;
+  left: 0.12rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(227, 181, 95, 0.56) 18%, rgba(227, 181, 95, 0.56) 82%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+/* Pin both rail cells to one row so the dormant bonus window can share the
+   live tally's cell without creating a phantom second row. Desktop only: the
+   phone rail stacks its cells in a single column (app.css ≤520px), so the
+   pins would overlap the live tally with the button there. */
+@media (min-width: 521px) {
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-flip-credit,
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta,
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-desk-bonus-slot {
+    grid-row: 1;
+  }
+}
+
+/* Dormant BONUS window: the same LED glass as the price window and funds
+   ledger, switched off until a quote earns FLIP (then the live dec-flip-credit
+   tally takes over the cell). */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-desk-bonus-slot {
+  grid-column: 1;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 0.22rem;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 3rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(98, 158, 115, 0.22);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px),
+    #071009;
+  box-shadow:
+    0 0 0 1px rgba(94, 68, 28, 0.32),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 0 10px rgba(78, 212, 116, 0.025);
+}
+
+body.layout-basic .app-decimator-panel .dec-desk-bonus-slot::before {
+  color: rgba(177, 205, 187, 0.42);
+  content: 'BONUS';
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  line-height: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-desk-bonus-slot::after {
+  color: rgba(148, 187, 160, 0.34);
+  content: '— FLIP';
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* The live tally replaces the dormant window; flip mode gives BUY the whole
+   rail, so the window bows out there too. */
+body.layout-basic .app-decimator-panel .dec-buy-row:has(> .dec-flip-credit:not([hidden])) > .dec-desk-bonus-slot,
+body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-desk-bonus-slot {
+  display: none;
+}
+
+/* BUY IN: the machined brass counter key. */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
+  position: relative;
+  overflow: visible;
+  border: 1px solid rgba(255, 224, 158, 0.78);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 244, 214, 0.045) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(255, 245, 213, 0.32), transparent 42%),
+    linear-gradient(135deg, #a96818, #e2ad4d 52%, #9b5c13);
+  color: #221307;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 223, 0.58),
+    inset 0 -2px 0 rgba(82, 41, 5, 0.44),
+    0 5px 15px rgba(196, 126, 25, 0.2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: border-color 0.15s ease, filter 0.15s ease, transform 0.15s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]::before {
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(68, 36, 9, 0.2);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 0 rgba(255, 248, 220, 0.16);
+  content: '';
+  pointer-events: none;
+}
+
+/* Once the order has a real total, a separate outline breathes around the key.
+   Opacity and light change without scaling the ring, so the edges stay crisp. */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write][data-buy-ready="true"]:not(:disabled)::after {
+  position: absolute;
+  inset: -3px;
+  border: 1px solid rgba(255, 226, 164, 0.52);
+  border-radius: 7px;
+  box-shadow: 0 0 5px rgba(232, 169, 62, 0.2);
+  content: '';
+  opacity: 0.38;
+  pointer-events: none;
+  animation: dec-buy-ready-outline 2.8s ease-in-out infinite;
+}
+
+@keyframes dec-buy-ready-outline {
+  0%, 100% {
+    border-color: rgba(255, 226, 164, 0.42);
+    box-shadow: 0 0 4px rgba(232, 169, 62, 0.16);
+    opacity: 0.38;
+  }
+  50% {
+    border-color: rgba(255, 239, 198, 0.78);
+    box-shadow: 0 0 10px rgba(240, 181, 72, 0.38);
+    opacity: 0.78;
+  }
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta__action,
+body.layout-basic .app-decimator-panel .dec-buy-cta__amount {
+  position: relative;
+  z-index: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta__action {
+  letter-spacing: 0.075em;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:hover:not(:disabled),
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:focus-visible:not(:disabled) {
+  border-color: #fff0c3;
+  filter: brightness(1.1);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+/* Unlit key: same machined metal, lamp off — crisp edges, engraved label. */
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write]:disabled {
+  border-color: rgba(216, 178, 108, 0.5);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 244, 214, 0.03) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(255, 238, 196, 0.1), transparent 46%),
+    linear-gradient(135deg, #5f431f, #8d6934 52%, #573b1b);
+  color: rgba(255, 239, 205, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 215, 0.14),
+    inset 0 -2px 0 rgba(40, 21, 5, 0.34);
+  filter: saturate(0.6);
+  opacity: 1;
+  text-shadow: 0 1px 0 rgba(24, 12, 2, 0.55);
+}
+
+/* Empty BUY IN chooser. The normal panel is an isolated, overflow-hidden
+   felt surface; release only that boundary while its direct-child modal is
+   live so the full-page dimmer can sample the other two jackpot columns. */
+body.layout-basic .jackpot-hero .app-decimator-panel:has(> .dec-buy-dialog:not([hidden])),
+body.layout-basic .jackpot-hero .app-decimator-panel:has(> .dec-builder-popover:not([hidden])) {
+  isolation: auto;
+  overflow: visible;
+}
+
+body.layout-basic .jackpot-hero .app-decimator-panel > .dec-buy-dialog:not([hidden]) {
+  z-index: 12030;
+}
+
+body.layout-basic .dec-buy-dialog__card {
+  --qst-dialog-rgb: 226, 173, 77;
+  --qst-dialog-accent: #f6d28b;
+  --qst-dialog-button-start: #f0c668;
+  --qst-dialog-button-end: #b8701a;
+  --qst-dialog-button-ink: #211307;
+  width: min(94vw, 31rem);
+  gap: 0.58rem;
+  border-color: rgba(238, 195, 112, 0.65);
+  background:
+    radial-gradient(circle at 86% 7%, rgba(222, 164, 61, 0.22), transparent 34%),
+    repeating-linear-gradient(45deg, rgba(255, 229, 176, 0.012) 0 1px, transparent 1px 4px),
+    linear-gradient(150deg, #291016, #0a080d 72%);
+}
+
+body.layout-basic .dec-buy-dialog__hero {
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 7% 50%, rgba(226, 173, 77, 0.2), transparent 35%),
+    linear-gradient(135deg, rgba(113, 51, 25, 0.34), rgba(7, 7, 12, 0.64));
+}
+
+body.layout-basic .dec-buy-dialog__house img {
+  width: 2.3rem;
+  height: 2.3rem;
+  filter: sepia(0.35) saturate(1.18) drop-shadow(0 0 8px rgba(237, 188, 94, 0.52));
+}
+
+body.layout-basic .dec-buy-dialog__choices {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+  padding: 0.3rem;
+  border-color: rgba(226, 173, 77, 0.32);
+  background: rgba(5, 4, 7, 0.58);
+}
+
+body.layout-basic .dec-buy-dialog__choices:has([data-bind="dec-buy-dialog-foil"][hidden]) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.layout-basic .dec-buy-dialog__choices:has([data-bind="dec-buy-dialog-luckbox"][hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.layout-basic .dec-buy-dialog__choice {
+  display: grid;
+  min-height: 5.15rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.34rem;
+}
+
+body.layout-basic .dec-buy-dialog__choice > span {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgba(226, 173, 77, 0.26);
+  border-radius: 50%;
+  background: rgba(226, 173, 77, 0.06);
+  color: #e9c883;
+  font: 950 1.15rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .dec-buy-dialog__choice.is-selected > span {
+  border-color: rgba(246, 210, 139, 0.86);
+  background: rgba(226, 173, 77, 0.18);
+  color: #fff0c6;
+  box-shadow: 0 0 15px rgba(226, 173, 77, 0.22);
+}
+
+body.layout-basic .dec-buy-dialog__choice > strong {
+  font: inherit;
+}
+
+body.layout-basic .dec-buy-dialog__amount {
+  border-color: rgba(226, 173, 77, 0.3);
+  background:
+    radial-gradient(circle at 88% 50%, rgba(226, 173, 77, 0.11), transparent 44%),
+    linear-gradient(135deg, rgba(84, 40, 21, 0.2), rgba(5, 6, 11, 0.68));
+}
+
+body.layout-basic .dec-buy-dialog__quote {
+  grid-template-columns: auto minmax(0, 1fr);
+  border-color: rgba(109, 177, 126, 0.3);
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px),
+    #07100b;
+}
+
+body.layout-basic .dec-buy-dialog__quote > span {
+  color: rgba(180, 207, 188, 0.68);
+}
+
+body.layout-basic .dec-buy-dialog__quote > strong {
+  color: #d7f3df;
+  text-align: right;
+  text-shadow: 0 0 7px rgba(98, 216, 132, 0.22);
+}
+
+body.layout-basic .dec-buy-dialog__feedback {
+  min-height: 0.85rem;
+  margin: -0.08rem 0 0;
+  color: #fca5a5;
+  font-size: 0.64rem;
+  font-weight: 750;
+  text-align: center;
+}
+
+body.layout-basic .dec-buy-dialog__confirm {
+  min-height: 3rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit {
+  border-color: rgba(98, 184, 119, 0.42);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 3px),
+    #08110d;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.54), inset 0 0 10px rgba(78, 212, 116, 0.04);
+}
+
+/* ------------------------------------------------------------------ */
+/* The quiet middle: a plain stretch of felt with the house seal       */
+/* pressed into it. Tone only — pressed shadow and a warm edge-light,  */
+/* never enamel or bright brass. The spacer is invisible furniture     */
+/* (aria-hidden markup): it takes whatever room the form leaves over   */
+/* and the seal scales with it, bowing out when the space runs dry.    */
+/* ------------------------------------------------------------------ */
+body.layout-basic .app-decimator-panel .dec-desk-cage {
+  position: relative;
+  display: grid;
+  flex: 1 1 0;
+  min-height: 0;
+  place-items: center;
+  container-type: size;
+  background: radial-gradient(58% 62% at 50% 48%, rgba(158, 84, 58, 0.07), transparent 72%);
+  pointer-events: none;
+}
+
+/* Pressed disc: a darker dish in the felt, light catching the lower rim. */
+body.layout-basic .app-decimator-panel .dec-desk-cage__seal {
+  position: relative;
+  width: min(76cqmin, 9.4rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.1) 58%, transparent 78%),
+    radial-gradient(circle at 50% 82%, rgba(198, 128, 78, 0.06), transparent 60%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 5px 11px rgba(0, 0, 0, 0.52),
+    inset 0 -2px 4px rgba(233, 186, 120, 0.09),
+    0 1px 0 rgba(238, 196, 130, 0.08),
+    0 -1px 1px rgba(0, 0, 0, 0.5);
+}
+
+/* Ring groove pressed just inside the disc's rim. */
+body.layout-basic .app-decimator-panel .dec-desk-cage__seal::before {
+  position: absolute;
+  inset: 7.5%;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 50%;
+  box-shadow:
+    0 1px 0 rgba(233, 190, 124, 0.08),
+    inset 0 1px 0 rgba(0, 0, 0, 0.3),
+    inset 0 -1px 0 rgba(233, 190, 124, 0.06);
+  content: '';
+}
+
+/* The house flame, stamped in the same felt tones (masked flame-center.svg). */
+body.layout-basic .app-decimator-panel .dec-desk-cage__seal::after {
+  position: absolute;
+  inset: 25%;
+  background: linear-gradient(180deg, rgba(206, 132, 84, 0.1), rgba(190, 116, 74, 0.16) 58%, rgba(224, 158, 100, 0.2));
+  content: '';
+  filter:
+    drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 1px 0 rgba(233, 190, 124, 0.09));
+  -webkit-mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
+  mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
+}
+
+/* When the form leaves no real room (busy connected states), the seal bows
+   out and the spacer quietly disappears. */
+@container (max-height: 4.1rem) {
+  body.layout-basic .app-decimator-panel .dec-desk-cage__seal {
+    display: none;
+  }
+}
+
+/* Below the three-column hero (app.css stacks the panel full-width under the
+   drawing machine at 1100px) the panel hugs its content, so the spacer keeps
+   a shallow fixed depth for the seal — and hands it back once connected rows
+   need the height. */
+@media (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .dec-desk-cage {
+    flex-basis: 5rem;
+    min-height: 5rem;
+  }
+
+  body.layout-basic .app-decimator-panel:has(> .dec-presale:not([hidden])) .dec-desk-cage,
+  body.layout-basic .app-decimator-panel:has(.dec-afking-jump:not([hidden])) .dec-desk-cage,
+  body.layout-basic .app-decimator-panel:has(.dec-flip-balance:not([hidden])) .dec-desk-cage {
+    flex-basis: 0;
+    min-height: 0;
+  }
+}
+
+/* Keep breathing room between the seal felt and the ledger without a
+   decorative divider above the optional ALL IN action. */
+body.layout-basic .app-decimator-panel .dec-funds-stack {
+  position: relative;
+  padding-top: 0.45rem;
+}
+
+/* The purchase desk still owns ALL IN quoting/submission and keeps its guarded
+   controller in the DOM. Its visible face moved to the drawing cabinet. */
+body.layout-basic .app-decimator-panel .dec-all-in {
+  display: none !important;
+}
+
+body.layout-basic .app-decimator-panel .dec-funds {
+  border-color: rgba(103, 153, 117, 0.5);
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #09140f, #060d0a);
+  box-shadow:
+    0 0 0 1px rgba(94, 68, 28, 0.4),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.72),
+    inset 0 0 16px rgba(63, 255, 157, 0.035),
+    0 3px 9px rgba(0, 0, 0, 0.2);
+}
+
+body.layout-basic .app-decimator-panel .dec-funds__summary-label {
+  color: rgba(189, 212, 198, 0.62);
+}
+
+body.layout-basic .app-decimator-panel .dec-funds__value,
+body.layout-basic .app-decimator-panel .dec-funds__number {
+  text-shadow: 0 0 6px rgba(85, 229, 129, 0.28);
+}
+
+body.layout-basic .app-decimator-panel .dec-foil {
+  border-radius: 6px;
+}
+
+/* When the hero collapses to one wide column, use the newly available width
+   for two parallel builders. At the three-machine desktop width each BUY IN
+   panel is intentionally narrow, so its builders stay in the clearer stack. */
+@media (min-width: 700px) and (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .dec-purchase-builders {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 520px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    min-height: 4.6rem;
+    padding-inline: 0.62rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-heading {
+    font-size: 1.12rem;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-input-group {
+    min-height: 5.8rem;
+    padding: 0.4rem 0.5rem 0.48rem 0.66rem;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-purchase-builder {
+    min-height: 0;
+    padding: 0.5rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-builder-head {
+    margin-bottom: 0.42rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces,
+  body.layout-basic .app-decimator-panel .dec-box-grid {
+    gap: 0.28rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-piece {
+    min-height: 4.8rem;
+    padding-inline: 0.15rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-piece__art {
+    width: min(3rem, 88%);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-total {
+    grid-template-columns: auto minmax(4.8rem, 1fr) auto;
+    gap: 0.3rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-total__field .dec-input,
+  body.layout-basic .app-decimator-panel .dec-box-quantity > input,
+  body.layout-basic .app-decimator-panel .dec-custom-box-control--size > input {
+    font-size: 1rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-card__add {
+    min-height: 5rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-card__copy > small {
+    font-size: 0.44rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-quantity {
+    grid-template-columns: 1.95rem minmax(0, 1fr) 1.95rem;
+    min-height: 2.45rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-quantity > button {
+    min-height: 2.45rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
+    min-height: 3.4rem;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-stepper {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-input-accessories {
+    right: 0.52rem;
+    width: 3.05rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row {
+    padding-top: 0.62rem;
+  }
+
+  /* The phone rail stacks in one column; BUY IN keeps the whole tap width and
+     the dormant window bows out. */
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-desk-bonus-slot {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write],
+  body.layout-basic .app-decimator-panel .dec-purchase-help,
+  body.layout-basic .app-decimator-panel .dec-ticket-piece,
+  body.layout-basic .app-decimator-panel .dec-ticket-piece__art,
+  body.layout-basic .app-decimator-panel .dec-box-card,
+  body.layout-basic .app-decimator-panel .dec-custom-box-toggle__chevron {
+    transition: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write][data-buy-ready="true"]:not(:disabled)::after {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
+@media (forced-colors: active) {
+  body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel,
+  body.layout-basic .app-decimator-panel .panel-header,
+  body.layout-basic .app-decimator-panel .dec-input-group,
+  body.layout-basic .app-decimator-panel .dec-ticket-piece,
+  body.layout-basic .app-decimator-panel .dec-box-card,
+  body.layout-basic .app-decimator-panel .dec-custom-box-toggle,
+  body.layout-basic .app-decimator-panel .dec-custom-box-fields,
+  body.layout-basic .app-decimator-panel .dec-price,
+  body.layout-basic .app-decimator-panel .dec-funds {
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::before,
+  body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel::after,
+  body.layout-basic .app-decimator-panel .panel-header::after,
+  body.layout-basic .app-decimator-panel .dec-header-title::before,
+  body.layout-basic .app-decimator-panel .dec-header-title::after,
+  body.layout-basic .app-decimator-panel .dec-buy-row::before,
+  body.layout-basic .app-decimator-panel .dec-desk-cage,
+  body.layout-basic .app-decimator-panel .dec-desk-bonus-slot {
+    display: none;
+  }
+}
+
+/* ================================================================== */
+/* Approved compact asset desk                                         */
+/* ================================================================== */
+
+.app-decimator-panel .dec-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+body.layout-basic .jackpot-hero > app-decimator-panel > .app-decimator-panel {
+  container-type: inline-size;
+}
+
+body.layout-basic .app-decimator-panel .panel-header {
+  display: grid;
+  min-height: 4.7rem;
+  grid-template-columns: minmax(0, 1fr) 8rem;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0.22rem 0.24rem;
+  padding: 0.38rem 0.46rem;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+body.layout-basic .app-decimator-panel .panel-header::after {
+  content: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title::before {
+  margin-left: 1.55rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-header-title::after {
+  /* Equal side clearance keeps BUY IN centered independently of the help link. */
+  margin-right: 1.55rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-heading {
+  display: block;
+  font-size: 1.02rem;
+  line-height: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-heading::before {
+  content: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-help {
+  right: 0.08rem;
+  left: auto;
+  width: 1.18rem;
+  height: 1.18rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-price {
+  display: grid;
+  width: 100%;
+  height: 2.8rem;
+  min-height: 2.8rem;
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 2;
+  grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;
+  align-content: center;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.1rem;
+  column-gap: 0;
+  padding: 0.25rem 0.26rem;
+  border-radius: 5px;
+  font-size: 0.54rem;
+  letter-spacing: 0.01em;
+  line-height: 1.08;
+}
+
+body.layout-basic .app-decimator-panel .dec-price > .dec-price__row {
+  display: contents;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__count {
+  grid-column: 1;
+  text-align: left;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__kind {
+  grid-column: 3;
+  text-align: right;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__sep {
+  grid-column: 5;
+  text-align: center;
+}
+
+/* The amount and its unit own separate cells. Both stay left-aligned so the
+   digits read straight down from the equals sign, and the unit gets a column
+   of its own so ETH (or FLIP) sits on one x down all three lines however many
+   digits the amount takes -- a longer level-1 entry price widens the shared
+   amount column for every quote at once rather than pushing its own unit out
+   of line. The amount column is sized to content, not to a reserved width, so
+   the unit lands one space past whichever of the three quotes runs furthest. */
+body.layout-basic .app-decimator-panel .dec-price__amount {
+  grid-column: 7;
+  min-width: 0;
+  overflow: visible;
+  text-align: left;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-price__unit {
+  grid-column: 9;
+  min-width: 0;
+  overflow: visible;
+  text-align: left;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  width: 100%;
+  height: 2.8rem;
+  min-height: 2.8rem;
+  grid-column: 2;
+  grid-row: 2;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-self: stretch;
+  align-content: center;
+  gap: 0.08rem;
+  overflow: hidden;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid rgba(216, 180, 254, 0.64);
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, rgba(5, 7, 13, 0.78) 0 62%, rgba(5, 7, 13, 0.2) 82%, transparent),
+    radial-gradient(circle at 92% 18%, rgba(244, 114, 182, 0.3), transparent 34%),
+    linear-gradient(130deg, rgba(124, 58, 237, 0.4), rgba(20, 83, 61, 0.7) 58%, rgba(22, 101, 52, 0.62)),
+    #0c1017;
+  box-shadow:
+    0 0 0 1px rgba(124, 88, 34, 0.5),
+    inset 0 1px rgba(250, 232, 255, 0.15),
+    inset 0 -2px rgba(15, 23, 42, 0.3),
+    0 0 11px rgba(168, 85, 247, 0.16),
+    0 3px 10px rgba(0, 0, 0, 0.24);
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.11) 48%, transparent 64%);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > img {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  right: -0.2rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  object-fit: contain;
+  opacity: 0.46;
+  filter: drop-shadow(0 0 8px rgba(134, 239, 172, 0.44));
+  transform: translateY(-50%) rotate(-8deg);
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > span,
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > strong {
+  position: relative;
+  z-index: 1;
+  grid-column: 1;
+  min-width: 0;
+  padding-right: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > span {
+  grid-row: 1;
+  color: #fdf4ff;
+  font-size: 0.52rem;
+  font-weight: 950;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  text-shadow: 0 1px 2px #050407;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > strong {
+  grid-row: 2;
+  color: #d1fae5;
+  font: 950 0.62rem/1.06 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px #031109, 0 0 6px rgba(74, 222, 128, 0.38);
+}
+
+/* An earned total is the live payoff preview, not more header metadata. Keep
+   ordinary bonus FLIP cyan so it separates from the idle mint copy and from
+   the separate gold Biggest Bounty state. */
+body.layout-basic .app-decimator-panel
+  .dec-flip-credit--header:not(.is-idle):not(.dec-flip-credit--bounty) > strong {
+  color: #a5f3fc;
+  font-size: 0.68rem;
+  text-shadow:
+    0 1px 2px #031109,
+    0 0 5px rgba(103, 232, 249, 0.74),
+    0 0 11px rgba(34, 211, 238, 0.32);
+}
+
+body.layout-basic .app-decimator-panel
+  .dec-flip-credit--header.dec-flip-credit--bounty > span {
+  color: #fde68a;
+}
+
+body.layout-basic .app-decimator-panel
+  .dec-flip-credit--header.dec-flip-credit--bounty > strong {
+  color: #facc15;
+  font-size: 0.68rem;
+  text-shadow: 0 1px 2px #140d02, 0 0 9px rgba(250, 204, 21, 0.62);
+}
+
+/* JS adds is-receiving only when the numeric FLIP total rises. Re-renders at
+   the same value stay still; the short instrument flash confirms the delta. */
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving {
+  animation: dec-bonus-flip-panel-increase 640ms cubic-bezier(0.2, 0.82, 0.24, 1);
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving > strong {
+  transform-origin: left center;
+  animation: dec-bonus-flip-value-increase 640ms cubic-bezier(0.2, 0.82, 0.24, 1);
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving > img {
+  animation: dec-bonus-flip-mark-increase 640ms cubic-bezier(0.2, 0.82, 0.24, 1);
+}
+
+@keyframes dec-bonus-flip-panel-increase {
+  0%, 100% { filter: brightness(1); }
+  42% {
+    border-color: rgba(165, 243, 252, 0.96);
+    box-shadow:
+      inset 0 0 16px rgba(255, 255, 255, 0.18),
+      0 0 8px rgba(103, 232, 249, 0.72),
+      0 0 18px rgba(244, 114, 182, 0.42);
+    filter: brightness(1.18);
+  }
+}
+
+@keyframes dec-bonus-flip-value-increase {
+  0% { opacity: 0.68; transform: translateY(0.12rem) scale(0.88); }
+  46% {
+    color: #fff3b0;
+    opacity: 1;
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.9), 0 0 14px rgba(250, 204, 21, 0.8);
+    transform: translateY(-0.04rem) scale(1.1);
+  }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dec-bonus-flip-mark-increase {
+  0% { transform: translateY(-50%) rotate(-8deg) scale(0.82); }
+  48% { transform: translateY(-50%) rotate(4deg) scale(1.16); }
+  100% { transform: translateY(-50%) rotate(-8deg) scale(1); }
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-idle {
+  border-color: rgba(192, 132, 252, 0.58);
+  background:
+    linear-gradient(90deg, rgba(5, 7, 13, 0.8) 0 62%, rgba(5, 7, 13, 0.2) 82%, transparent),
+    radial-gradient(circle at 92% 18%, rgba(244, 114, 182, 0.26), transparent 34%),
+    linear-gradient(130deg, rgba(109, 40, 217, 0.4), rgba(20, 83, 61, 0.6) 62%, rgba(22, 101, 52, 0.52)),
+    #0c1017;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-idle > img {
+  opacity: 0.38;
+  filter: saturate(0.8) drop-shadow(0 0 7px rgba(192, 132, 252, 0.32));
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-credit--header > .dec-flip-credit__boon {
+  position: relative;
+  z-index: 2;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 3;
+  align-self: center;
+  padding-right: 0.9rem;
+  overflow: hidden;
+  color: #f5d0fe;
+  font: 900 0.34rem/1.12 "Roboto Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builders {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.44rem;
+}
+
+body.layout-basic .jackpot-hero .app-decimator-panel .dec-purchase-builder {
+  position: relative;
+  display: block;
+  min-height: 0;
+  padding: 0.5rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builder > .dec-input-accessories {
+  position: absolute;
+  z-index: 8;
+  top: 0.18rem;
+  right: 0.18rem;
+  display: flex;
+  width: 2.45rem;
+  min-width: 0;
+  gap: 0.08rem;
+  pointer-events: none;
+  transform: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-pieces {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.2rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+  .dec-ticket-piece--foil:not([hidden])
+) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece {
+  position: relative;
+  display: grid;
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 4.75rem;
+  padding: 0.16rem;
+  place-items: center;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__copy {
+  position: absolute;
+  z-index: 12;
+  top: 0.28rem;
+  left: 0.28rem;
+  display: grid;
+  min-height: 0;
+  padding: 0.18rem 0.32rem 0.16rem;
+  place-items: center;
+  border: 1px solid rgba(239, 202, 130, 0.44);
+  border-radius: 999px;
+  background: #0a0709;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.42), inset 0 1px rgba(255, 243, 216, 0.08);
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__copy > strong {
+  color: #f3d89e;
+  font-size: 0.48rem;
+  letter-spacing: 0.085em;
+  line-height: 1;
+  text-shadow: 0 1px 2px #000, 0 0 5px rgba(226, 181, 94, 0.22);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-piece__copy,
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__copy {
+  left: 50%;
+  box-sizing: border-box;
+  width: min(3.2rem, calc(100% - 0.32rem));
+  padding: 0.27rem 0.46rem 0.24rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-piece__copy {
+  top: 0.28rem;
+  transform: translateX(-50%);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__copy {
+  top: 0.28rem;
+  transform: translateX(-50%);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+  .dec-ticket-piece--foil:not([hidden])
+) .dec-ticket-piece--ticket .dec-ticket-piece__copy,
+body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+  .dec-ticket-piece--foil:not([hidden])
+) .dec-ticket-piece--entry .dec-ticket-piece__copy {
+  padding: 0.24rem 0.3rem 0.22rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art {
+  position: absolute;
+  inset: 0.08rem;
+  display: grid;
+  width: auto;
+  height: auto;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.48));
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > span {
+  opacity: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__art,
+body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket .dec-ticket-piece__art,
+body.layout-basic .app-decimator-panel .dec-ticket-piece--pack .dec-ticket-piece__art,
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil .dec-ticket-piece__art {
+  inset: 0.08rem;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+
+/* The rendered ticket and pack art is the control. Keep the semantic button
+   as the full, accessible hit target without painting a second tile around
+   it; interaction feedback belongs to the art itself. */
+body.layout-basic .app-decimator-panel .dec-ticket-piece:hover,
+body.layout-basic .app-decimator-panel .dec-ticket-piece:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  transform: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art {
+  transform-origin: center;
+  transition: filter 0.14s ease, transform 0.14s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:hover .dec-ticket-piece__art,
+body.layout-basic .app-decimator-panel .dec-ticket-piece:focus-visible .dec-ticket-piece__art {
+  filter:
+    brightness(1.08)
+    drop-shadow(0 5px 6px rgba(0, 0, 0, 0.52))
+    drop-shadow(0 0 6px rgba(248, 211, 141, 0.28));
+  transform: translateY(-1px) scale(1.025);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:focus-visible .dec-ticket-piece__art {
+  outline: 2px solid rgba(248, 211, 141, 0.94);
+  outline-offset: 1px;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece:active .dec-ticket-piece__art {
+  transform: translateY(1px) scale(0.985);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--entry .dec-ticket-piece__art::after {
+  content: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-face,
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-ticket-face {
+  --ticket-line-color: #b18a32;
+  position: relative;
+  display: grid;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  overflow: hidden;
+  border: 2px solid var(--ticket-line-color);
+  border-radius: 7px;
+  background: #d9d9d9;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-face::before,
+body.layout-basic .app-decimator-panel .dec-ticket-face::after {
+  position: absolute;
+  z-index: 4;
+  background: var(--ticket-line-color);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-face::before {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-face::after {
+  top: calc(50% - 1px);
+  right: 0;
+  left: 0;
+  height: 2px;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-trait {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  background: #d9d9d9;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-trait img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 122%;
+  height: 122%;
+  max-width: none;
+  object-fit: contain;
+  object-position: 50% 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Give the four ticket traits more breathing room around the center flame.
+   Entry keeps its single trait centered horizontally, with a smaller downward
+   nudge so the badge sits visually inside the quarter-ticket silhouette. */
+body.layout-basic .app-decimator-panel .dec-ticket-face > .dec-ticket-trait:nth-child(-n+2) img {
+  top: 42%;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-face > .dec-ticket-trait:nth-child(n+3) img {
+  top: 58%;
+}
+
+body.layout-basic .app-decimator-panel .dec-entry-face .dec-ticket-trait img {
+  top: 54%;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-center {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 20%;
+  aspect-ratio: 1;
+  /* The portrait flame must not stretch this square before it is rotated. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  border: 1px solid var(--ticket-line-color);
+  border-radius: 0;
+  background: #fff;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-center img {
+  min-width: 0;
+  min-height: 0;
+  width: 95%;
+  height: 95%;
+  object-fit: contain;
+  transform: rotate(-45deg);
+}
+
+body.layout-basic .app-decimator-panel .dec-entry-face,
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-entry-face {
+  --ticket-line-color: #b18a32;
+  isolation: isolate;
+  display: grid;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  padding: 2px;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  background: var(--ticket-line-color);
+}
+
+body.layout-basic .app-decimator-panel .dec-entry-face .dec-ticket-trait {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  clip-path: inherit;
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-face,
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-pack-face {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  width: auto;
+  max-width: 92%;
+  height: 100%;
+  aspect-ratio: 0.72;
+  grid-template-rows: minmax(0, 1.3fr) minmax(0, 0.84fr) minmax(0, 0.84fr);
+  align-content: center;
+  justify-items: center;
+  gap: 0.09rem;
+  padding: 0.42rem 0.22rem 0.2rem;
+  overflow: hidden;
+  border: 1px solid #8b83d9;
+  border-radius: 5px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.15), transparent 38%),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 3px, transparent 3px 7px),
+    linear-gradient(160deg, #4c3b94, #29245f 54%, #111329);
+  box-shadow: 2px 2px 0 #211944, 4px 4px 0 rgba(107, 88, 179, 0.55), 0 5px 8px rgba(0, 0, 0, 0.45);
+  clip-path: polygon(0 5%, 8% 0, 16% 5%, 24% 0, 32% 5%, 40% 0, 48% 5%, 56% 0, 64% 5%, 72% 0, 80% 5%, 88% 0, 100% 5%, 100% 100%, 0 100%);
+  transform: rotate(2deg);
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-face::before {
+  position: absolute;
+  z-index: -1;
+  inset: 4px 3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  content: '';
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-face::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: #818cf8;
+  box-shadow: 0 -1px 6px rgba(129, 140, 248, 0.5);
+  content: '';
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-mark,
+body.layout-basic .app-decimator-panel .dec-pack-level,
+body.layout-basic .app-decimator-panel .dec-pack-count {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  place-items: center;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-mark {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(9, 8, 27, 0.46);
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-mark img {
+  width: 1.35rem;
+  height: 1.35rem;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-level {
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: linear-gradient(180deg, #111827, #030712);
+  color: #f8fafc;
+  box-shadow: 0 2px 6px rgba(226, 232, 240, 0.3);
+  font: 1000 0.46rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-count {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(5, 6, 15, 0.58);
+  color: #fff;
+  font: 1000 0.44rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-check {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil {
+  border-color: transparent;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected .dec-ticket-piece__art {
+  filter:
+    brightness(1.08)
+    drop-shadow(0 4px 5px rgba(0, 0, 0, 0.48))
+    drop-shadow(0 0 8px rgba(103, 232, 249, 0.42))
+    drop-shadow(0 0 12px rgba(244, 114, 182, 0.3));
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-pack-face,
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-foil-pack-face {
+  width: auto;
+  max-width: 92%;
+  height: 100%;
+  aspect-ratio: 0.72;
+  grid-template-rows: minmax(0, 1.3fr) minmax(0, 0.84fr) minmax(0, 0.84fr);
+  border-color: #fff1a8;
+  background:
+    radial-gradient(circle at 50% 26%, rgba(255, 255, 255, 0.55), transparent 27%),
+    linear-gradient(125deg, #56e0ff, #b694ff, #ff89c8, #ffe180, #69f0c0, #56e0ff);
+  background-size: 100% 100%, 300% 300%;
+  box-shadow: 2px 2px 0 #2b1837, 4px 4px 0 rgba(103, 232, 249, 0.28), 0 0 18px rgba(255, 225, 128, 0.2);
+  transform: rotate(-2deg);
+  animation: dec-foil-pack-drift 7s ease-in-out infinite;
+}
+
+@keyframes dec-foil-pack-drift {
+  50% { background-position: 0 0, 100% 50%; }
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-pack-face::after {
+  background: linear-gradient(90deg, #56e0ff, #ff89c8, #ffe180, #69f0c0);
+}
+
+/* Suppress only the unclassified legacy mark during a mixed-cache refresh;
+   the current badge is deliberately layered behind the LIMIT 1 stamp. */
+body.layout-basic .app-decimator-panel .dec-foil-pack-face .dec-pack-mark:not(.dec-foil-pack-badge) {
+  display: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-pack-shine {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 28%, rgba(255, 255, 255, 0.26) 48%, transparent 66%);
+  pointer-events: none;
+  transform: translateX(-120%);
+  animation: dec-foil-pack-sheen 3.2s ease-in-out infinite;
+}
+
+@keyframes dec-foil-pack-sheen {
+  0%, 62% { transform: translateX(-120%); }
+  88%, 100% { transform: translateX(120%); }
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-pack-face .dec-pack-level {
+  grid-row: 2;
+  border-color: #fff7cd;
+  background: linear-gradient(180deg, #fff1a8, #d7a728);
+  color: #1a1206;
+  box-shadow: 0 2px 7px rgba(255, 225, 128, 0.42);
+  font-size: 0.42rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-pack-face .dec-pack-count {
+  grid-row: 3;
+  box-sizing: border-box;
+  width: calc(100% + 0.18rem);
+  padding-inline: 0.04rem;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(#090615, #110a19) padding-box,
+    linear-gradient(90deg, #56e0ff, #b694ff 24%, #ff89c8 50%, #ffe180 74%, #69f0c0) border-box;
+  color: #fffbe8;
+  box-shadow:
+    inset 0 0 7px rgba(182, 148, 255, 0.3),
+    0 0 7px rgba(86, 224, 255, 0.28),
+    0 0 10px rgba(255, 137, 200, 0.2);
+  font-size: 0.52rem;
+  letter-spacing: 0.055em;
+  text-align: center;
+  text-shadow:
+    0 0 3px rgba(86, 224, 255, 0.9),
+    0 0 6px rgba(255, 137, 200, 0.72),
+    0 1px 1px #000;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-limit-stamp,
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-foil-limit-stamp {
+  position: absolute;
+  z-index: 13;
+  top: 0.18rem;
+  left: 0.14rem;
+  display: inline-flex;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 3.5rem;
+  height: auto;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.12rem;
+  padding: 0.19rem 0.22rem 0.16rem;
+  overflow: visible;
+  border: 2px solid #ff3542;
+  border-radius: 3px;
+  background: #26050a;
+  color: #ff3542;
+  box-shadow: inset 0 0 0 1px rgba(255, 53, 66, 0.28), 0 2px 5px rgba(0, 0, 0, 0.58), 0 0 8px rgba(255, 34, 48, 0.26);
+  clip-path: none;
+  filter: none;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  line-height: 1;
+  opacity: 1;
+  text-shadow: 0 0 5px rgba(255, 45, 58, 0.54);
+  transform: rotate(8deg);
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-limit-stamp strong {
+  font-size: 0.52rem;
+  font-weight: 1000;
+  letter-spacing: 0.035em;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-limit-stamp small {
+  font-size: 0.52rem;
+  font-weight: 1000;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-selected-check,
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-foil-selected-check {
+  position: absolute;
+  z-index: 10;
+  bottom: 0.1rem;
+  left: 0;
+  display: grid;
+  width: 1.12rem;
+  height: 1.12rem;
+  place-items: center;
+  border: 2px solid #bbf7d0;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(3, 20, 10, 0.82), 0 0 11px rgba(74, 222, 128, 0.68);
+  font: 1000 0.67rem/1 system-ui, sans-serif;
+  opacity: 0;
+  transform: scale(0.55) rotate(-12deg);
+  transition: opacity 0.14s ease, transform 0.17s cubic-bezier(0.2, 0.9, 0.25, 1.35);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected .dec-foil-selected-check,
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil.is-selected .dec-ticket-piece__art > .dec-foil-selected-check {
+  opacity: 1;
+  transform: scale(1) rotate(-6deg);
+}
+
+/* Corner quest bubbles extend above their purchase frame, including their pulse. */
+body.layout-basic .app-decimator-panel .dec-purchase-builder {
+  overflow: visible;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--ticket > .dec-ticket-single-quest,
+body.layout-basic .app-decimator-panel .dec-ticket-piece--pack > .dec-ticket-pack-quest {
+  position: absolute;
+  z-index: 14;
+  top: -0.6rem;
+  right: -0.2rem;
+  bottom: auto;
+  width: 1.18rem;
+  min-width: 0;
+  height: 1.18rem;
+  min-height: 0;
+  padding: 0;
+  translate: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-piece--foil > quest-objective-indicator {
+  position: absolute;
+  z-index: 14;
+  top: -0.52rem;
+  right: -0.52rem;
+  bottom: auto;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.28rem;
+  margin-bottom: 0.34rem;
+  padding-left: 0.05rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-title {
+  grid-column: 1;
+  position: relative;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-title > strong {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox
+  .dec-builder-title > .dec-input-accessories {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  right: auto;
+  left: calc(100% + 0.1rem);
+  display: block;
+  width: 2.62rem;
+  height: 1.45rem;
+  pointer-events: none;
+  transform: translateY(-50%);
+  translate: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox
+  .dec-builder-title > .dec-input-accessories > quest-objective-indicator {
+  top: -0.35rem;
+  right: auto;
+  left: -0.35rem;
+  width: 1.08rem;
+  height: 1.08rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox
+  .dec-builder-title > .dec-input-accessories > boon-product-indicator {
+  top: 0;
+  right: 0;
+  left: auto;
+  width: 1.42rem;
+  height: 1.42rem;
+}
+
+/* The bonus readout already explains ticket boons. Keep the duplicate arrow
+   from covering the fourth (Foil Pack) item in the compact ticket shelf. */
+body.layout-basic .app-decimator-panel .dec-input-group--tickets
+  > .dec-input-accessories > boon-product-indicator {
+  display: none !important;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
+  display: inline-flex;
+  width: auto;
+  min-height: 1.78rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  padding: 0.22rem 0.38rem;
+  border: 1px solid rgba(177, 145, 207, 0.32);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(182, 145, 215, 0.09), rgba(25, 16, 31, 0.74));
+  color: #cfb9e1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle {
+  min-height: 1.78rem;
+  min-width: 0;
+  max-width: 100%;
+  justify-self: start;
+  margin: 0;
+  padding: 0.16rem 0.46rem 0.16rem 0.24rem;
+  text-align: left;
+}
+
+/* Title and live sale status need separate lines in the narrow Buy In column. */
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__copy > strong,
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle__copy > small {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-logo {
+  display: grid;
+  width: 1.24rem;
+  height: 1.24rem;
+  flex: 0 0 1.24rem;
+  place-items: center;
+  border: 1px solid rgba(213, 188, 235, 0.46);
+  border-radius: 5px;
+  background: linear-gradient(145deg, rgba(182, 139, 219, 0.22), rgba(43, 27, 53, 0.7));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-logo > svg {
+  display: block;
+  width: 0.94rem;
+  height: 0.94rem;
+  fill: rgba(50, 30, 62, 0.88);
+  stroke: #ddc8ee;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.55;
+  vector-effect: non-scaling-stroke;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle strong {
+  font-size: 0.57rem;
+  letter-spacing: 0.07em;
+}
+
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle:hover,
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle:focus-visible,
+body.layout-basic .app-decimator-panel .dec-custom-box-toggle.is-selected {
+  border-color: rgba(218, 191, 241, 0.72);
+  background: linear-gradient(180deg, rgba(200, 164, 230, 0.15), rgba(46, 28, 57, 0.8));
+  outline: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-grid {
+  gap: 0.27rem;
+}
+
+body.layout-basic .jackpot-hero .app-decimator-panel .dec-input-group--lootbox.dec-purchase-builder {
+  padding: 0 0.4rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-builder-head {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 0.12rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-group--lootbox .dec-builder-title {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  text-align: left;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card {
+  --box-tone: #779ab8;
+  --box-tone-rgb: 119 154 184;
+  --box-art-perspective-y: 1;
+  --box-visible-aspect: 1.3693;
+  --box-art-canvas-width: 104.96%;
+  --box-art-left: -2.33%;
+  --box-art-top: -13.85%;
+  position: relative;
+  width: min(6.2rem, 100%);
+  aspect-ratio: var(--box-visible-aspect);
+  justify-self: center;
+  align-self: end;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card[data-tone="green"] {
+  --box-tone: #34d399;
+  --box-tone-rgb: 52 211 153;
+  --box-art-perspective-y: 1;
+  --box-visible-aspect: 1.2663;
+  --box-art-canvas-width: 119.05%;
+  --box-art-left: -8.73%;
+  --box-art-top: -20.24%;
+  width: min(4.2rem, 74%);
+  translate: 0 -2px;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card[data-tone="purple"] {
+  --box-tone: #a855f7;
+  --box-tone-rgb: 168 85 247;
+  --box-art-perspective-y: 1;
+  --box-visible-aspect: 1.3696;
+  --box-art-canvas-width: 119.05%;
+  --box-art-left: -8.73%;
+  --box-art-top: -26.06%;
+  width: min(6.4rem, 96%);
+  translate: 0 -3px;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card[data-tone="gold"] {
+  --box-tone: #f5a623;
+  --box-tone-rgb: 245 166 35;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card.is-selected {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__add {
+  position: relative;
+  appearance: none;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__add:hover,
+body.layout-basic .app-decimator-panel .dec-box-card__add:focus-visible {
+  background: transparent;
+  outline: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--box-art-canvas-width);
+  height: auto;
+  aspect-ratio: 1;
+  margin-top: var(--box-art-top);
+  margin-left: var(--box-art-left);
+  --box-price-size: 0.96rem;
+  --box-unit-size: 0.7rem;
+  transform: scaleY(var(--box-art-perspective-y));
+  transform-origin: center;
+  transition: filter 0.14s ease, transform 0.14s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__add:hover .dec-box-card__art,
+body.layout-basic .app-decimator-panel .dec-box-card__add:focus-visible .dec-box-card__art,
+body.layout-basic .app-decimator-panel .dec-box-card.is-selected .dec-box-card__art {
+  filter: brightness(1.08) drop-shadow(0 0 0.5rem rgb(var(--box-tone-rgb) / 0.42));
+  transform: translateY(-1px) scale(1.02) scaleY(var(--box-art-perspective-y));
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__add:active .dec-box-card__art {
+  filter: brightness(1.03) drop-shadow(0 0 0.34rem rgb(var(--box-tone-rgb) / 0.34));
+  transform: scale(0.98) scaleY(var(--box-art-perspective-y));
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card--small .dec-box-card__art {
+  --box-price-size: 0.76rem;
+  --box-unit-size: 0.6rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card--medium .dec-box-card__art {
+  --box-price-size: 0.89rem;
+  --box-unit-size: 0.65rem;
+}
+
+/* These widths describe the visible case bounds rather than each source
+   bitmap's transparent square canvas. Gold therefore defines and fills the
+   complete case-row height without leaving a dead band above it. */
+body.layout-basic .app-decimator-panel .dec-box-card--large {
+  width: min(12rem, 100%);
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.66)) drop-shadow(0 0 8px rgb(var(--box-tone-rgb) / 0.22));
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+/* The first paint is a tiny CSS case silhouette, not an empty square with a
+   detached price in it. It costs no extra request and remains until the full
+   authored bitmap has fired load. */
+body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-card__quickload {
+  position: absolute;
+  z-index: 0;
+  top: 52%;
+  right: auto;
+  left: 50%;
+  display: block;
+  min-width: 0;
+  width: 82%;
+  height: auto;
+  aspect-ratio: 1.4;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--box-tone) 66%, #d8c7e7);
+  border-radius: 10% 10% 7% 7% / 16% 16% 8% 8%;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--box-tone) 34%, #15111b) 0 61%,
+      color-mix(in srgb, var(--box-tone) 14%, #08070b) 62% 100%);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--box-tone-rgb) / 0.22),
+    0 4px 7px rgba(0, 0, 0, 0.58),
+    0 0 8px rgb(var(--box-tone-rgb) / 0.2);
+  opacity: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.14s ease, visibility 0.14s step-end;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card--small .dec-box-card__quickload {
+  width: 78%;
+  aspect-ratio: 1.46;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card--medium .dec-box-card__quickload {
+  width: 88%;
+  aspect-ratio: 1.34;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card--large .dec-box-card__quickload {
+  width: 96%;
+  aspect-ratio: 1.48;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__quickload::before {
+  position: absolute;
+  inset: 9% 11% 39%;
+  border: 1px solid rgb(var(--box-tone-rgb) / 0.54);
+  border-radius: 9%;
+  background: rgba(3, 3, 6, 0.36);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.42);
+  content: '';
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__quickload::after {
+  position: absolute;
+  top: 62%;
+  right: 7%;
+  left: 7%;
+  height: 2px;
+  background: color-mix(in srgb, var(--box-tone) 58%, #f4e8ff);
+  box-shadow: 0 0 5px rgb(var(--box-tone-rgb) / 0.34);
+  content: '';
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card--small .dec-box-card__art img,
+body.layout-basic .app-decimator-panel .dec-box-card--medium .dec-box-card__art img,
+body.layout-basic .app-decimator-panel .dec-box-card--large .dec-box-card__art img {
+  width: 100%;
+}
+
+/* All three Buy In cards carry their authored materials. The historical
+   compact pair is already the matched green/purple palette-shifted family. */
+body.layout-basic .app-decimator-panel .dec-box-card__art::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: var(--box-tone);
+  content: '';
+  mix-blend-mode: color;
+  opacity: 0;
+  pointer-events: none;
+  -webkit-mask: var(--lootbox-case-purchase-art) center / contain no-repeat;
+  mask: var(--lootbox-case-purchase-art) center / contain no-repeat;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card:is(
+  [data-lootbox-case-model="small"],
+  [data-lootbox-case-model="medium"]
+) .dec-box-card__art::after {
+  opacity: 0;
+}
+
+/* The compact Buy In renders already contain their badges. The gold card uses
+   the canonical badge layer so its mark stays crisp at the larger size. */
+body.layout-basic .app-decimator-panel .dec-box-card__art::before {
+  position: absolute;
+  z-index: 5;
+  top: var(--lootbox-top-badge-top, 77.5%);
+  left: 50%;
+  width: var(--lootbox-top-badge-size, 16.8%);
+  aspect-ratio: 1;
+  background: url('/whitepaper/flame-logo.svg') center / contain no-repeat;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scaleY(var(--lootbox-top-badge-scale-y, 0.78));
+  transition: opacity 0.14s ease;
+}
+
+/* The compact cards keep their authored badge and hardware. */
+body.layout-basic .app-decimator-panel .dec-box-card:is(
+  [data-lootbox-case-model="small"],
+  [data-lootbox-case-model="medium"]
+) .dec-box-card__art::before {
+  display: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card:is(
+  [data-lootbox-case-model="small"],
+  [data-lootbox-case-model="medium"]
+) .dec-box-card__art > .dec-box-value {
+  gap: 0.18rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-value {
+  position: absolute;
+  z-index: 6;
+  top: var(--lootbox-price-top, 27%);
+  right: auto;
+  left: 50%;
+  display: flex;
+  min-width: 0;
+  width: var(--lootbox-price-width, 45%);
+  height: var(--lootbox-price-height, 19%);
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #fff;
+  box-shadow: none;
+  font: inherit;
+  opacity: 0;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-value > strong {
+  min-width: 0;
+  overflow: visible;
+  max-width: 100%;
+  color: #fff6d8;
+  font: 900 var(--box-price-size)/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  -webkit-text-stroke: 0.02em rgba(39, 23, 8, 0.98);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0.075em 0 rgba(105, 65, 18, 0.98),
+    0 0.16em 0.16em rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > .dec-box-value > small {
+  flex: 0 0 auto;
+  color: #fff6d8;
+  font: 900 var(--box-unit-size)/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: -0.045em;
+  -webkit-text-stroke: 0.02em rgba(39, 23, 8, 0.98);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0.075em 0 rgba(105, 65, 18, 0.98),
+    0 0.16em 0.16em rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > img.is-art-ready {
+  opacity: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > img.is-art-ready + .dec-box-card__quickload {
+  visibility: hidden;
+  opacity: 0;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art > img.is-art-ready ~ .dec-box-value {
+  opacity: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__art:has(> img.is-art-ready)::before {
+  opacity: 1;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__copy {
+  gap: 0.03rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__copy > strong {
+  display: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card__copy > small {
+  color: color-mix(in srgb, var(--box-tone) 72%, white);
+  font: 850 0.49rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card > .dec-box-quantity {
+  position: absolute;
+  z-index: 7;
+  /* Keep the selected count above the recessed price display. The card shell
+     tracks visible case bounds, so this remains registered at every tier. */
+  top: -1.08rem;
+  right: 0.28rem;
+  display: grid;
+  width: 2rem;
+  min-height: 1.45rem;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--box-tone) 58%, #d8c7e7);
+  border-radius: 999px;
+  background: rgba(7, 6, 10, 0.9);
+  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.52), 0 0 8px rgb(var(--box-tone-rgb) / 0.2);
+  backdrop-filter: blur(3px);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card.is-selected > .dec-box-quantity {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card > .dec-box-quantity > button {
+  display: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-card > .dec-box-quantity > input {
+  min-height: 1.45rem;
+  padding: 0.1rem 0.16rem;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 0.78rem;
+  text-align: center;
+  text-shadow: 0 0 6px rgb(var(--box-tone-rgb) / 0.5);
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-popover {
+  position: fixed;
+  z-index: 12035;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  padding: 1rem;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  animation: dec-builder-popup-in 0.17s ease both;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-popover[hidden] {
+  display: none !important;
+}
+
+@keyframes dec-builder-popup-in {
+  from { opacity: 0; }
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-popover__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: #030205;
+  cursor: default;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(100%, 21rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(205, 174, 231, 0.58);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #2a1a32, #100b14);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.7), inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__head {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__head > span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__head strong {
+  color: #e2cff1;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__head small {
+  color: #9d88ad;
+  font-size: 0.54rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__close {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgba(205, 174, 231, 0.3);
+  border-radius: 50%;
+  background: #130d17;
+  color: #d7c3e7;
+  cursor: pointer;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__field {
+  display: grid;
+  min-width: 0;
+  gap: 0.28rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__field > span:first-child {
+  color: #a992bc;
+  font-size: 0.49rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog .dec-box-quantity,
+body.layout-basic .app-decimator-panel .dec-builder-dialog .dec-custom-box-control--size {
+  min-height: 2.55rem;
+  border: 1px solid rgba(176, 143, 209, 0.3);
+  border-radius: 5px;
+  background: #09070c;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog .dec-box-quantity {
+  grid-template-columns: 2rem minmax(0, 1fr) 2rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog .dec-box-quantity > button {
+  display: block;
+  min-height: 2.55rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__done {
+  display: grid;
+  grid-column: 1 / -1;
+  min-height: 2.55rem;
+  grid-template-columns: auto auto;
+  place-content: center;
+  align-items: baseline;
+  gap: 0.38rem;
+  border: 1px solid rgba(205, 174, 231, 0.5);
+  border-radius: 5px;
+  background: linear-gradient(180deg, #69428a, #3c2352);
+  color: #f4e9fb;
+  cursor: pointer;
+  font-size: 0.65rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__done > span {
+  font: 950 0.65rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+
+body.layout-basic .app-decimator-panel .dec-builder-dialog__done > strong {
+  color: #fff1a8;
+  font: 950 0.72rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.035em;
+  text-shadow: 0 0 8px rgba(253, 230, 138, 0.28);
+}
+
+body.layout-basic .app-decimator-panel .dec-box-options-dialog {
+  width: min(100%, 23rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__dialog {
+  width: min(100%, 20rem);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Which physical case the configured ETH-each buys. The source cards use
+   square transparent canvases, so fit their measured visible bounds instead
+   of shrinking that whole canvas into a shallow slot. */
+body.layout-basic .app-decimator-panel .dec-box-preview {
+  display: grid;
+  grid-column: 1 / -1;
+  min-height: 5.35rem;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  overflow: hidden;
+  padding: 0.28rem 0.5rem;
+  border: 1px solid rgba(176, 143, 209, 0.28);
+  border-radius: 7px;
+  background: linear-gradient(145deg, rgba(139, 108, 255, 0.09), rgba(8, 7, 14, 0.7));
+}
+
+/* The author `display: grid` above outranks the UA [hidden] rule, so the
+   attribute needs its own companion or the preview never hides. */
+body.layout-basic .app-decimator-panel .dec-box-preview[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__art {
+  --preview-visible-aspect: 1.2663;
+  --preview-canvas-width: 119.05%;
+  --preview-canvas-left: -8.73%;
+  --preview-canvas-top: -20.24%;
+  position: relative;
+  display: block;
+  width: min(5.6rem, 100%);
+  aspect-ratio: var(--preview-visible-aspect);
+  overflow: hidden;
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__art[data-lootbox-case-model="medium"] {
+  --preview-visible-aspect: 1.3696;
+  --preview-canvas-width: 119.05%;
+  --preview-canvas-left: -8.73%;
+  --preview-canvas-top: -26.06%;
+  width: min(6.4rem, 100%);
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__art[data-lootbox-case-model="large"] {
+  --preview-visible-aspect: 1.3693;
+  --preview-canvas-width: 104.96%;
+  --preview-canvas-left: -2.33%;
+  --preview-canvas-top: -13.85%;
+  width: min(7rem, 100%);
+}
+
+body.layout-basic .app-decimator-panel .dec-box-preview__image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--preview-canvas-width);
+  height: auto;
+  aspect-ratio: 1;
+  margin-top: var(--preview-canvas-top);
+  margin-left: var(--preview-canvas-left);
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 7px rgba(139, 108, 255, 0.22));
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__offer {
+  position: relative;
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 0.7rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(210, 185, 133, 0.36);
+  border-radius: 10px;
+  background:
+    radial-gradient(ellipse at 12% 0, rgba(195, 151, 72, 0.13), transparent 68%),
+    linear-gradient(150deg, #231d28, #100d15);
+  box-shadow: inset 0 1px rgba(255, 237, 200, 0.08), 0 3px 10px rgba(0, 0, 0, 0.18);
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__offer[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__label {
+  display: grid;
+  grid-template-columns: 5.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.55rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__title {
+  color: #f4e9d7;
+  font: 850 0.82rem/1.2 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.065em;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__credit {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__credit small {
+  color: #b9a995;
+  font: 650 0.53rem/1.25 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.07em;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__credit strong {
+  min-width: 0;
+  color: #ead3a2;
+  font: 750 0.87rem/1.3 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.3696;
+  overflow: hidden;
+}
+
+/* Use the case's visible bounds, without the empty square canvas or a label
+   pasted over its lid. The natural purple and silver match the purchase cases. */
+body.layout-basic .app-decimator-panel .dec-presale__art img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 119.05%;
+  max-width: none;
+  height: auto;
+  aspect-ratio: 1;
+  margin-top: -26.06%;
+  margin-left: -8.73%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5));
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto 3.6rem;
+  min-height: 2.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(194, 172, 136, 0.3);
+  border-radius: 6px;
+  background: #09080d;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls:focus-within {
+  border-color: #d9bd86;
+  outline: 2px solid rgba(217, 189, 134, 0.2);
+  outline-offset: 2px;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls input {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.65rem;
+  color: #f5eee3;
+  font: 750 1rem/1.2 "Roboto Mono", ui-monospace, monospace;
+  text-align: left;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls input::-webkit-inner-spin-button,
+body.layout-basic .app-decimator-panel .dec-presale__controls input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls > span {
+  align-self: center;
+  padding: 0 0.65rem 0 0.1rem;
+  color: #a99b89;
+  font: 750 0.59rem/1 "Inter", system-ui, sans-serif;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls button {
+  min-height: 2.75rem;
+  border-left-color: rgba(194, 172, 136, 0.3);
+  background: linear-gradient(180deg, #302638, #211927);
+  color: #ead3a2;
+  font: 850 0.62rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls button:hover:not(:disabled) {
+  background: #40314a;
+  color: #fff0cf;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__controls button:focus-visible {
+  outline: 2px solid #ead3a2;
+  outline-offset: -4px;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale__offer.dec-presale--selected {
+  border-color: rgba(225, 196, 138, 0.65);
+  box-shadow: inset 0 1px rgba(255, 237, 200, 0.1), 0 0 0 1px rgba(225, 196, 138, 0.08);
+}
+
+body.layout-basic .app-decimator-panel .dec-presale--over-limit .dec-presale__controls {
+  border-color: #df8b83;
+}
+
+body.layout-basic .app-decimator-panel .dec-presale--over-limit .dec-presale__controls input {
+  color: #ffc2b9;
+}
+
+/* Degenesis (audit 4f4aa8377) reuses the presale row: a window line under the title and the
+   player's orders (pending, then their FLIP / sDGNRS / WWXRP / pass results) under the controls. */
+body.layout-basic .app-decimator-panel .dec-degenesis__window {
+  color: #c9b48f;
+  font: 700 0.55rem/1.25 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.07em;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.45rem 0 0;
+  border-top: 1px solid rgba(210, 185, 133, 0.18);
+  list-style: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders li {
+  min-width: 0;
+  color: #d9c7a6;
+  font: 650 0.6rem/1.35 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+body.layout-basic .app-decimator-panel .dec-degenesis__orders li.is-pending {
+  color: #9d917f;
+}
+
+@media (max-width: 380px) {
+  body.layout-basic .app-decimator-panel .dec-presale__offer { padding: 0.65rem; }
+  body.layout-basic .app-decimator-panel .dec-presale__label { grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0.55rem; }
+  body.layout-basic .app-decimator-panel .dec-presale__title { font-size: 0.73rem; letter-spacing: 0.035em; }
+  body.layout-basic .app-decimator-panel .dec-presale__credit strong { font-size: 0.78rem; }
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row {
+  display: grid;
+  grid-template-columns: var(--dec-clear-column) minmax(0, 1fr) minmax(6.45rem, 0.7fr);
+  align-items: stretch;
+  gap: var(--dec-order-gap);
+  margin-top: 0.06rem;
+  padding-top: 0.06rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row::before {
+  content: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-clear {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.55rem;
+  padding: 0.18rem 0.35rem;
+  border: 1px solid rgba(209, 166, 84, 0.28);
+  border-radius: 4px;
+  background: rgba(19, 12, 12, 0.74);
+  color: #ac9467;
+  cursor: pointer;
+  font-size: 0.46rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field {
+  display: grid;
+  min-width: 0;
+  min-height: 2.55rem;
+  grid-template-columns: minmax(0, 1fr) auto 1.8rem;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(111, 153, 123, 0.38);
+  border-radius: 4px;
+  background: #07100b;
+  box-shadow: inset 0 0 10px rgba(88, 220, 124, 0.05);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field .dec-input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0.25rem 0.12rem 0.25rem 0.4rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #dff6e5;
+  box-shadow: none;
+  font: 850 0.88rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-shadow: 0 0 6px rgba(85, 229, 129, 0.22);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field .dec-input::-webkit-inner-spin-button,
+body.layout-basic .app-decimator-panel .dec-ticket-total__field .dec-input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field > strong {
+  align-self: center;
+  padding: 0 0.2rem 0 0.04rem;
+  color: #7fa38a;
+  font: 850 0.48rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.035em;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-stepper {
+  display: grid;
+  min-width: 1.8rem;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  border-left: 1px solid rgba(111, 153, 123, 0.28);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(105, 190, 129, 0.16), rgba(43, 103, 61, 0.1));
+  color: #a9e8ba;
+  cursor: pointer;
+  font-size: 0;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step::before {
+  width: 0.58rem;
+  height: 0.36rem;
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  content: '';
+  filter: drop-shadow(0 0 3px rgba(132, 232, 160, 0.38));
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step[data-dir="-1"]::before {
+  transform: rotate(180deg);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step + .dec-step {
+  border-top: 1px solid rgba(117, 182, 135, 0.26);
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step:hover,
+body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step:focus-visible {
+  background: rgba(75, 164, 101, 0.3);
+  color: #ecfff1;
+  outline: none;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write],
+body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-buy-cta[data-write] {
+  grid-column: 3;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 2.55rem;
+  min-height: 2.55rem;
+  max-height: 2.55rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  padding: 0.28rem 0.4rem;
+  font-size: 0.66rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* FLIP mode retires the entire Luckbox builder, so spend that recovered room
+   on a full-width burn action instead of squeezing its two-part quote into the
+   narrow ETH purchase column. Clear and TIX stay together on the row above. */
+body.layout-basic .app-decimator-panel .dec-buy-row--flip {
+  grid-template-columns: var(--dec-clear-column) minmax(0, 1fr);
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-buy-cta[data-write] {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta__action,
+body.layout-basic .app-decimator-panel .dec-buy-cta__amount {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta__action {
+  font-size: 0.76rem;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta:has(.dec-buy-cta__amount[hidden]) .dec-buy-cta__action {
+  max-width: 4.7rem;
+  overflow: visible;
+  line-height: 0.95;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-cta__amount {
+  font-size: 0.65rem;
+  letter-spacing: 0.035em;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting {
+  animation: dec-buy-prompt 0.28s ease;
+}
+
+@keyframes dec-buy-prompt {
+  25% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+  75% { transform: translateX(-1px); }
+}
+
+/* A purchase-piece tap sends a small copy of its actual artwork to the field
+   it changes: Entry / Ticket / Pack land in TIX, while Foil lands on BUY IN.
+   The transaction amount still changes synchronously; this is only a short
+   physical handoff ending in a destination confirmation. */
+body.layout-basic .app-decimator-panel .dec-purchase-flyer.dec-ticket-piece__art {
+  position: absolute;
+  z-index: 40;
+  inset: auto;
+  margin: 0;
+  pointer-events: none;
+  transition: none;
+  transform-origin: center;
+  animation: dec-purchase-flight 0.66s cubic-bezier(0.2, 0.78, 0.24, 1) forwards;
+  will-change: transform, opacity;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-flyer__quantity {
+  position: absolute;
+  z-index: 20;
+  top: 0.08rem;
+  right: 0.08rem;
+  display: grid;
+  min-width: 1.28rem;
+  height: 1.28rem;
+  padding: 0 0.18rem;
+  place-items: center;
+  border: 1px solid rgba(187, 247, 208, 0.88);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #86efac, #22c55e);
+  color: #052e16;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5), 0 0 9px rgba(74, 222, 128, 0.44);
+  font: 950 0.56rem/1 "Roboto Mono", ui-monospace, monospace;
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-flyer--foil .dec-purchase-flyer__quantity {
+  min-width: 2.48rem;
+  border-color: transparent;
+  background:
+    linear-gradient(180deg, #24122e, #0c111f) padding-box,
+    linear-gradient(90deg, #56e0ff, #b694ff, #ff89c8, #ffe180, #69f0c0) border-box;
+  color: #fffbe8;
+  box-shadow:
+    0 2px 7px rgba(0, 0, 0, 0.56),
+    0 0 11px rgba(182, 148, 255, 0.58);
+  letter-spacing: 0.025em;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.55);
+}
+
+@keyframes dec-purchase-flight {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.62) rotate(-5deg); }
+  12% { opacity: 1; transform: translate3d(0, 0, 0) scale(0.9) rotate(-2deg); }
+  58% { opacity: 1; transform: translate3d(var(--dec-flight-mid-x), var(--dec-flight-mid-y), 0) scale(0.78) rotate(4deg); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--dec-flight-x), var(--dec-flight-y), 0) scale(0.24) rotate(9deg); }
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field {
+  position: relative;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving {
+  animation: dec-ticket-total-catch 0.42s ease-out;
+}
+
+body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving::after {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(134, 239, 172, 0.34), transparent 72%);
+  content: '';
+  pointer-events: none;
+  animation: dec-ticket-total-flash 0.42s ease-out forwards;
+}
+
+@keyframes dec-ticket-total-catch {
+  42% {
+    border-color: rgba(134, 239, 172, 0.94);
+    box-shadow: inset 0 0 14px rgba(74, 222, 128, 0.18), 0 0 12px rgba(74, 222, 128, 0.3);
+    transform: scale(1.025);
+  }
+}
+
+@keyframes dec-ticket-total-flash {
+  0% { opacity: 0; }
+  35% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].is-receiving {
+  animation: dec-buy-foil-catch 0.44s ease-out;
+}
+
+@keyframes dec-buy-foil-catch {
+  0%, 100% { filter: brightness(1); transform: scale(1); }
+  42% {
+    border-color: #fff5bf;
+    box-shadow:
+      inset 0 0 16px rgba(255, 255, 255, 0.34),
+      0 0 10px rgba(86, 224, 255, 0.52),
+      0 0 18px rgba(255, 137, 200, 0.45),
+      0 0 25px rgba(255, 225, 128, 0.32);
+    filter: brightness(1.24);
+    transform: scale(1.025);
+  }
+}
+
+@container (max-width: 330px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    grid-template-columns: minmax(0, 1fr) 7rem;
+    column-gap: 0.14rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces {
+    gap: 0.14rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-piece__copy > strong {
+    font-size: 0.47rem;
+    letter-spacing: 0.08em;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-face {
+    width: min(4rem, 96%);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-entry-face {
+    width: min(3.7rem, 92%);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-pack-face {
+    width: min(3.45rem, 92%);
+    height: 4.55rem;
+    grid-template-rows: 1.42rem 0.92rem 0.92rem;
+  }
+
+}
+
+@media (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    min-height: 4.4rem;
+    grid-template-columns: minmax(0, 1fr) 6.45rem;
+    grid-template-rows: auto 2.8rem;
+    gap: 0.18rem 0.2rem;
+    padding: 0.3rem 0.4rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-header-title {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-content: center;
+    padding: 0 1.08rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-header-title::before,
+  body.layout-basic .app-decimator-panel .dec-header-title::after {
+    display: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-heading {
+    font-size: 0.88rem;
+    letter-spacing: 0.12em;
+    text-indent: 0.12em;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-help {
+    right: 0;
+    left: auto;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  /* The title owns the top row. The three-rate screen and bonus readout share
+     an equal-height instrument row beneath it. */
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-column: 1;
+    grid-row: 2;
+    grid-template-columns: 1ch max-content 1.5ch max-content 0.5ch minmax(max-content, 1fr);
+    justify-content: stretch;
+    gap: 0.09rem 0.08rem;
+    padding: 0.25rem 0.18rem;
+    font-size: clamp(0.54rem, 2.2vw, 0.6rem);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__count {
+    grid-column: 1;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__kind {
+    grid-column: 2;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__sep {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__amount {
+    grid-column: 4;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__unit {
+    grid-column: 6;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-purchase-builder {
+    min-height: 0;
+    grid-template-rows: none;
+    padding: 0.5rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-piece {
+    min-height: 6.25rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-card > .dec-box-quantity {
+    top: -1.42rem;
+    right: 50%;
+    width: min(4.9rem, calc(100% - 0.36rem));
+    min-height: 1.9rem;
+    grid-template-columns: 1.5rem minmax(0, 1fr) 1.5rem;
+    transform: translateX(50%);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-card > .dec-box-quantity > button {
+    display: block;
+    min-height: 1.9rem;
+    border: 0;
+    background: rgb(var(--box-tone-rgb) / 0.12);
+    color: color-mix(in srgb, var(--box-tone) 58%, white);
+    font-size: 1rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-card > .dec-box-quantity > input {
+    min-height: 1.9rem;
+    border-right: 1px solid rgba(176, 143, 209, 0.2);
+    border-left: 1px solid rgba(176, 143, 209, 0.2);
+    font-size: 1rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-builder-dialog {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-builder-dialog__head,
+  body.layout-basic .app-decimator-panel .dec-builder-dialog__done {
+    grid-column: 1;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row {
+    grid-template-columns: var(--dec-clear-column) minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
+    gap: var(--dec-order-gap);
+    margin-top: 0;
+    padding-top: 0.3rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-total__field {
+    min-height: 3rem;
+    grid-template-columns: minmax(0, 1fr) auto 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-total__field .dec-input {
+    font-size: 1rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-stepper {
+    min-width: 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-stepper .dec-step::before {
+    width: 0.78rem;
+    height: 0.48rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-clear {
+    min-height: 3rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write],
+  body.layout-basic .app-decimator-panel .dec-buy-row--flip > .dec-buy-cta[data-write] {
+    grid-column: 3;
+    grid-row: 1;
+    height: 3rem;
+    min-height: 3rem;
+    max-height: 3rem;
+    font-size: 0.76rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-buy-row--flip {
+    grid-template-columns: var(--dec-clear-column) minmax(6.2rem, 0.9fr) minmax(6.25rem, 1.1fr);
+  }
+
+  /* Fit the pass below Clear within the existing 48px control cell. */
+  body.layout-basic .app-decimator-panel .dec-clear-actions {
+    gap: 0;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-clear-actions > .dec-ticket-clear {
+    height: 1.5rem;
+    min-height: 1.5rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-clear-actions > .dec-afking-jump {
+    position: static;
+    width: var(--dec-clear-column);
+    height: 1.5rem;
+  }
+
+  /* Below the three-column desktop hero, the order controls are one compact
+     line and Available Funds is the second. Retire the decorative felt spacer,
+     then spend part of that recovered height on the clickable ticket artwork. */
+  body.layout-basic .app-decimator-panel .dec-desk-cage {
+    display: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-funds-stack {
+    margin-top: 0;
+    padding-top: 0;
+  }
+
+  /* Keep the desktop quote's balanced tabular columns when the hero stacks.
+     The earlier compact fallback packs them to the left, leaving the rest of
+     a wider rate window visually empty. */
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-template-columns: 1ch 1ch 6ch 2ch 1ch 2ch max-content 1ch max-content;
+    justify-content: center;
+    gap: 0.1rem;
+    column-gap: 0;
+    font-size: 0.54rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__count {
+    grid-column: 1;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__kind {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__sep {
+    grid-column: 5;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__amount {
+    grid-column: 7;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price__unit {
+    grid-column: 9;
+  }
+}
+
+/* The hero is still a single stacked column on small tablets and landscape
+   phones, but its full width is much larger than the compact instruments were
+   designed to consume. Keep the rates + bonus together as one centered desk
+   cluster, using the same centered rate geometry as desktop. */
+@media (min-width: 521px) and (max-width: 1099px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    width: 100%;
+    min-height: 4rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 11.4rem) 8rem minmax(0, 1fr);
+    grid-template-rows: auto 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-column: 2;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    height: 2.35rem;
+    min-height: 2.35rem;
+  }
+
+  /* Four products already fill the shelf. Preserve their compact natural
+     proportions instead of making the narrow pack art chase extra height. */
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+    .dec-ticket-piece--foil:not([hidden])
+  ) .dec-ticket-piece {
+    min-height: 6.25rem;
+  }
+
+  /* With no level-gated Foil pack, three controls have even more room. Give
+     their real silhouettes that room instead of leaving three thumbnails in
+     four-product-sized whitespace. */
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-ticket-piece {
+    min-height: clamp(8rem, 18vw, 10.75rem);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-ticket-piece__copy > strong {
+    font-size: 0.54rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-pack-mark img {
+    width: 42cqi;
+    height: 42cqi;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) :is(.dec-pack-level, .dec-pack-count) {
+    font-size: 0.52rem;
+  }
+}
+
+@media (max-width: 520px) {
+  body.layout-basic .app-decimator-panel .panel-header {
+    min-height: 4.05rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 11.4rem) 6.45rem minmax(0, 1fr);
+    grid-template-rows: auto 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price {
+    grid-column: 2;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    grid-column: 3;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-price,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header {
+    height: 2.35rem;
+    min-height: 2.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces {
+    gap: 0.16rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:has(
+    .dec-ticket-piece--foil:not([hidden])
+  ) .dec-ticket-piece {
+    min-height: 6.25rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-ticket-pieces:not(:has(
+    .dec-ticket-piece--foil:not([hidden])
+  )) .dec-ticket-piece {
+    min-height: 7.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .app-decimator-panel .dec-box-card__art {
+    transition: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-box-card__art > :is(img, .dec-box-card__quickload) {
+    transition: none;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-foil-pack-face,
+  body.layout-basic .app-decimator-panel .dec-pack-shine,
+  body.layout-basic .app-decimator-panel .dec-purchase-builders.is-prompting,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving,
+  body.layout-basic .app-decimator-panel .dec-flip-credit--header.is-receiving > :is(strong, img),
+  body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write].is-receiving,
+  body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving,
+  body.layout-basic .app-decimator-panel .dec-ticket-total__field.is-receiving::after {
+    animation: none;
+  }
+  body.layout-basic .app-decimator-panel .dec-purchase-flyer { display: none; }
+}
+
+/* The cards and PASSES lettering form one freestanding clickable mark. */
+.app-decimator-panel .dec-afking-jump {
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  flex: 0 0 auto;
+  width: 86px;
+  align-self: flex-start;
+  margin-inline: 0 auto;
+  height: 65px;
+  min-height: 65px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: transform 140ms ease;
+}
+
+.app-decimator-panel .dec-afking-jump[hidden] {
+  display: none !important;
+}
+
+.app-decimator-panel .dec-afking-jump__face {
+  display: block;
+  width: 86px;
+  height: 65px;
+  object-fit: contain;
+  pointer-events: none;
+  transition: filter 140ms ease;
+}
+
+.app-decimator-panel .dec-afking-jump:hover:not(:disabled),
+.app-decimator-panel .dec-afking-jump:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.app-decimator-panel .dec-afking-jump:hover:not(:disabled) .dec-afking-jump__face,
+.app-decimator-panel .dec-afking-jump:focus-visible .dec-afking-jump__face {
+  filter: brightness(1.1) drop-shadow(0 2px 3px rgba(210, 214, 224, .22));
+}
+
+.app-decimator-panel .dec-afking-jump:focus-visible {
+  outline: 2px solid #e9e3d9;
+  outline-offset: 3px;
+}
+
+.app-decimator-panel .dec-afking-jump:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+body.layout-basic .app-decimator-panel:has(.dec-afking-jump:not([hidden])) .dec-desk-cage {
+  display: none;
+}
+
+/* Desktop uses the open space under Clear; compact layouts place the same
+   button beside the balance rows below. */
+.app-decimator-panel .dec-clear-actions {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.app-decimator-panel .dec-buy-row > .dec-ticket-total__field {
+  align-self: start;
+}
+
+.app-decimator-panel .dec-purchase-footer {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--dec-order-gap);
+  margin-top: auto;
+}
+
+.app-decimator-panel .dec-clear-actions > .dec-afking-jump {
+  position: absolute;
+  top: var(--dec-afking-top, calc(100% + 0.5rem));
+  left: 0;
+  /* Preserve the mark's 72:57 proportions as the spare felt grows. */
+  width: calc(min(5.15rem, var(--dec-afking-space, 2.6rem)) * 72 / 57);
+  height: min(5.15rem, var(--dec-afking-space, 2.6rem));
+  min-height: 0;
+  margin: 0;
+}
+
+.app-decimator-panel .dec-clear-actions .dec-afking-jump__face {
+  width: 100%;
+  height: 100%;
+}
+
+/* Desktop FLIP purchases have a second action row. Keep its full-width burn
+   button clear before placing the pass in the space below the order rail. */
+@media (min-width: 1100px) {
+  .app-decimator-panel .dec-buy-row--flip .dec-afking-jump {
+    top: var(--dec-afking-top, calc(100% + var(--dec-order-gap) + 2.55rem + 0.5rem));
+  }
+
+  /* If the expanded ETH breakdown consumes the spare felt, keep the pass
+     under Clear within its existing control cell. */
+  body.layout-basic .app-decimator-panel:not(.has-afking-room):has(.dec-funds__summary[aria-expanded="true"]) .dec-clear-actions {
+    gap: 0;
+  }
+
+  body.layout-basic .app-decimator-panel:not(.has-afking-room):has(.dec-funds__summary[aria-expanded="true"]) .dec-clear-actions > .dec-ticket-clear {
+    height: 1.275rem;
+    min-height: 1.275rem;
+  }
+
+  body.layout-basic .app-decimator-panel:not(.has-afking-room):has(.dec-funds__summary[aria-expanded="true"]) .dec-clear-actions > .dec-afking-jump {
+    position: static;
+    width: var(--dec-clear-column);
+    height: 1.275rem;
+  }
+}
+
+body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
+  grid-column: 1;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+@media (min-width: 0px) {
+  body.layout-basic .app-decimator-panel .dec-purchase-footer {
+    --dec-pass-in-footer: 1;
+    grid-template-columns: min(34%, 7.75rem) minmax(0, 1fr);
+    column-gap: 0.4rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-funds-stack {
+    grid-column: 2;
+    grid-row: 1;
+    /* Keep ETH at the foot of the pass even when the FLIP row is hidden. */
+    align-self: end;
+    container-type: inline-size;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-footer > .dec-afking-jump {
+    position: static;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    aspect-ratio: 72 / 57;
+    margin: 0;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-footer .dec-afking-jump__face {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 72 / 57;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-purchase-footer:not(:has(.dec-funds.is-expanded)) > .dec-afking-jump {
+    align-self: center;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-clear-actions:not(:has(.dec-afking-jump)) > .dec-ticket-clear {
+    height: var(--dec-control-height);
+    min-height: var(--dec-control-height);
+  }
+
+  /* Keep the full amount on its own line as the balances share the footer. */
+  body.layout-basic .app-decimator-panel .dec-flip-balance {
+    grid-template-areas: "action label" "value value";
+    column-gap: 0.2rem;
+    padding-inline: 0.35rem;
+  }
+
+  /* The mode button and label share a header; leave a full line below for
+     the amount. Both ledgers use the same rows, including loading values. */
+  body.layout-basic .app-decimator-panel .dec-flip-balance,
+  body.layout-basic .app-decimator-panel .dec-funds:has(.dec-funds__summary[aria-expanded="false"]) {
+    height: 2.9rem;
+    min-height: 2.9rem;
+    grid-template-rows: 1.05rem minmax(0, 1fr);
+    padding-inline: 0.35rem;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-funds:has(.dec-funds__summary[aria-expanded="false"]) .dec-funds__total {
+    padding-inline: 0;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-balance__label {
+    align-self: center;
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-balance .dec-flip-balance__mode {
+    height: 1.05rem;
+    min-height: 1.05rem;
+    max-height: 1.05rem;
+  }
+
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-flip-balance__value,
+  body.layout-basic .jackpot-hero .app-decimator-panel .dec-funds__value {
+    font-size: clamp(0.82rem, 7.3cqi, 1.05rem);
+  }
+
+  body.layout-basic .app-decimator-panel .dec-flip-balance__label,
+  body.layout-basic .app-decimator-panel .dec-funds__summary-label {
+    letter-spacing: 0.08em;
+  }
+}
+
+/* When FLIP is private, its currency switch shares the ETH instrument.
+   The existing button and quest marker move together into this slot. */
+.dec-funds__privacy-mode[hidden] { display: none; }
+
+body.layout-basic .app-decimator-panel .dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) {
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.42rem;
+}
+
+.dec-funds__privacy-mode {
+  display: inline-flex;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) > .dec-funds__summary {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) > .dec-funds__total {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+/* Pack labels use the pack's own width, including the enlarged ticket shelf. */
+body.layout-basic .app-decimator-panel .dec-ticket-piece__art > .dec-pack-face {
+  container-type: inline-size;
+}
+body.layout-basic .app-decimator-panel .dec-pack-face .dec-pack-level {
+  font-size: max(.42rem, 14cqi);
+}
+body.layout-basic .app-decimator-panel .dec-pack-face .dec-pack-count {
+  font-size: max(.42rem, 15cqi);
+  letter-spacing: .025em;
+}
+body.layout-basic .app-decimator-panel .dec-pack-face .dec-pack-mark img {
+  width: 42cqi;
+  height: 42cqi;
+  max-height: 90%;
+}
+
+.dec-funds.is-expanded > .dec-funds__privacy-mode {
+  grid-row: 1;
+}
+
+.dec-funds:has(> .dec-funds__privacy-mode:not([hidden])) > .dec-funds__breakdown {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-decimator-panel .dec-afking-jump,
+  .app-decimator-panel .dec-afking-jump__face { transition: none; }
+}
+
+/* Product surfaces use the cart handle as their hotspot, so the custom cursor
+   still points precisely at the item being added. Keep ordinary controls and
+   disabled purchase actions on their native cursors. */
+@media (hover: hover) and (pointer: fine) {
+  body.layout-basic .app-decimator-panel .dec-ticket-piece:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-box-card__add:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-custom-box-toggle:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-buy-cta[data-write]:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-builder-dialog__done[data-write]:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-buy-dialog__choice:not(:disabled),
+  body.layout-basic .app-decimator-panel [data-bind="dec-buy-dialog-confirm"]:not(:disabled),
+  body.layout-basic .app-decimator-panel .dec-afking-jump:not(:disabled) {
+    cursor: url('/app/assets/shopping-cart-cursor.svg') 3 3, pointer;
+  }
+}
+
+body.layout-basic .dec-popup-bonus { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .65rem .8rem; border: 1px solid #426a63; border-radius: 8px; background: #142d27; color: #b9f6d1; }
+body.layout-basic .dec-popup-bonus > span { font: 800 .7rem/1.2 Inter, sans-serif; }
+body.layout-basic .dec-popup-bonus > strong { font: 800 1rem/1.2 'Roboto Mono', monospace; }
+body.layout-basic .dec-popup-bonus[hidden] { display: none; }

@@ -1,0 +1,118 @@
+/* status-bar.css -- Game status bar component */
+
+/* ------------------------------------------------------------------ */
+/* Status bar grid                                                      */
+/* ------------------------------------------------------------------ */
+.status-bar {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: clamp(0.4rem, 1.5vw, 0.75rem);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+/* ------------------------------------------------------------------ */
+/* Individual status items                                              */
+/* ------------------------------------------------------------------ */
+.status-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.status-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-dim);
+}
+
+.status-value {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-primary);
+  line-height: 1.2;
+}
+
+/* ------------------------------------------------------------------ */
+/* Status input (e.g. referral code)                                    */
+/* ------------------------------------------------------------------ */
+.status-input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--accent-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.2rem 0.4rem;
+  width: 100%;
+  max-width: 100px;
+}
+
+.status-input::placeholder {
+  color: var(--text-dim);
+  font-weight: 400;
+  text-transform: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase color variants                                                 */
+/* ------------------------------------------------------------------ */
+.status-value.phase--normal   { color: var(--success); }
+.status-value.phase--jackpot  { color: var(--warning); }
+.status-value.phase--rng      { color: var(--error); }
+
+/* Presale color variants */
+.status-value.presale--active   { color: var(--success); }
+.status-value.presale--inactive { color: var(--text-dim); }
+
+/* ------------------------------------------------------------------ */
+/* Activity score                                                       */
+/* ------------------------------------------------------------------ */
+.activity-score {
+  position: relative;
+  cursor: help;
+}
+
+.activity-score-tooltip {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.activity-score:hover .activity-score-tooltip {
+  display: block;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                           */
+/* ------------------------------------------------------------------ */
+@media (max-width: 640px) {
+  .status-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 400px) {
+  .status-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+}

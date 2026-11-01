@@ -1,0 +1,764 @@
+/* Big Ass Flip eve — full-width x9 event rail.
+ *
+ * 80% of the BAF pool (the scatter: 50% first + 30% second place,
+ * DegenerusJackpots.runBafJackpot) skips any wallet whose BAF score is zero, so
+ * the rail leads with the numbers that decide that: the pool, its split, and
+ * the player's own score. Ranking decides 15% and is sized like it.
+ *
+ * Palette is the BAF's own blue: the deity pass owns gold and the prize pools
+ * own green, so a level-transition event never reads as a balance readout.
+ * Nothing on this rail animates.
+ */
+
+body.layout-basic app-baf-eve {
+  display: block;
+  min-width: 0;
+  margin: 0 0 0.82rem;
+}
+
+body.layout-basic app-baf-eve[hidden],
+body.layout-basic .baf-eve[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .baf-eve {
+  --baf-flash: 226, 242, 255;
+  --baf-arc: 56, 160, 255;
+  --baf-deep: 21, 63, 143;
+  --baf-inert: 109, 113, 124;
+  --baf-cash: 134, 239, 172;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns:
+    minmax(10.8rem, 0.82fr) minmax(16rem, 1.66fr)
+    minmax(8.6rem, 0.82fr) minmax(15rem, 1.3fr);
+  min-height: 7.05rem;
+  align-items: stretch;
+  gap: 0.56rem 0.62rem;
+  padding: 0.66rem 0.7rem 0.62rem;
+  overflow: hidden;
+  border: 1px solid rgba(var(--baf-inert), 0.42);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 6% 0%, rgba(var(--baf-deep), 0.16), transparent 17rem),
+    linear-gradient(180deg, #161b26 0%, #0f131d 38%, #080a10 100%);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.5),
+    inset 0 1px rgba(var(--baf-flash), 0.09);
+}
+
+body.layout-basic .baf-eve.is-armed {
+  border-color: rgba(var(--baf-arc), 0.6);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.5),
+    0 0 30px rgba(var(--baf-deep), 0.16),
+    inset 0 1px rgba(var(--baf-flash), 0.14);
+}
+
+/* Milled plate: a machined edge, not a glass card. */
+body.layout-basic .baf-eve::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg, transparent 0 5px, rgba(var(--baf-flash), 0.012) 5px 6px);
+  content: '';
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Signature: the scatter slice, drawn                                  */
+/* 50 rounds. 4 tickets sampled. The top 2 by BAF score are paid.       */
+/* ------------------------------------------------------------------ */
+
+body.layout-basic .baf-eve__band {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0 0;
+  border-top: 1px solid rgba(var(--baf-inert), 0.2);
+  text-align: left;
+}
+
+body.layout-basic .baf-eve__band-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.42rem;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__band-label b {
+  color: rgba(var(--baf-flash), 0.62);
+  font: 800 0.53rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__band-label b { color: rgb(var(--baf-arc)); }
+
+body.layout-basic .baf-eve__band-label small {
+  color: rgba(var(--baf-flash), 0.3);
+  font: 700 0.46rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.035em;
+}
+
+/* Width-driven: the viewBox aspect gives the band its height, so the 50 rounds
+   always span the full rail and the tickets stay round at any breakpoint. */
+body.layout-basic .baf-eve__scatter {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  pointer-events: none;
+}
+
+body.layout-basic .baf-eve__ticket {
+  fill: rgba(var(--baf-inert), 0.3);
+}
+
+body.layout-basic .baf-eve__ticket.is-paid {
+  fill: rgba(var(--baf-flash), 0.55);
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__ticket.is-paid {
+  fill: rgb(var(--baf-arc));
+}
+
+/* ------------------------------------------------------------------ */
+/* Identity                                                            */
+/* ------------------------------------------------------------------ */
+
+body.layout-basic .baf-eve__identity {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 2.9rem minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.1rem;
+  border-right: 1px solid rgba(var(--baf-inert), 0.2);
+}
+
+body.layout-basic .baf-eve__mark {
+  display: block;
+  width: 2.9rem;
+  height: 2.9rem;
+  filter: grayscale(1) brightness(0.72);
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__mark {
+  filter: drop-shadow(0 0 10px rgba(var(--baf-deep), 0.5));
+}
+
+body.layout-basic .baf-eve__mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+body.layout-basic .baf-eve__identity-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+body.layout-basic .baf-eve__identity-copy > small {
+  color: rgba(var(--baf-flash), 0.42);
+  font: 800 0.52rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__identity-copy > small b {
+  color: rgba(var(--baf-flash), 0.86);
+  font: inherit;
+}
+
+/* The name is blunt, so it is set blunt: big, tight, stacked, no corporate
+   tracking. Wrapping to two lines is the point — it makes a block, not a label. */
+body.layout-basic .baf-eve__identity h2 {
+  margin: 0;
+  overflow-wrap: break-word;
+  color: rgb(var(--baf-flash));
+  font: 900 clamp(1.02rem, 1.62vw, 1.44rem)/0.86 "Inter", system-ui, sans-serif;
+  letter-spacing: -0.026em;
+  text-transform: uppercase;
+}
+
+body.layout-basic .baf-eve__countdown {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.3rem;
+  color: rgba(var(--baf-flash), 0.5);
+  font: 800 0.53rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__countdown i {
+  width: 0.34rem;
+  height: 0.34rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgb(var(--baf-inert));
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__countdown i {
+  background: rgb(var(--baf-arc));
+  box-shadow: 0 0 8px rgba(var(--baf-arc), 0.85);
+}
+
+/* ------------------------------------------------------------------ */
+/* The pool, and where it actually goes                                */
+/* ------------------------------------------------------------------ */
+
+body.layout-basic .baf-eve__pool,
+body.layout-basic .baf-eve__mine {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  border: 1px solid rgba(var(--baf-inert), 0.2);
+  border-radius: 3px;
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.24));
+}
+
+body.layout-basic .baf-eve__pool {
+  gap: 0.34rem;
+  padding: 0.6rem 0.8rem;
+  border-color: rgba(var(--baf-cash), 0.3);
+  background: linear-gradient(170deg, rgba(var(--baf-cash), 0.055), rgba(0, 0, 0, 0.3));
+}
+
+/* base.css styles the page `footer` element (padding: 1.5rem 0 1rem), which
+   also lands on every nested <footer> in a component. Reset it here or the
+   pool card carries 40px of phantom height under its split bar. */
+body.layout-basic .baf-eve__pool > header,
+body.layout-basic .baf-eve__pool > footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  text-align: left;
+}
+
+body.layout-basic .baf-eve__pool-icon {
+  display: grid;
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+body.layout-basic .baf-eve__pool-icon img { width: 1.14rem; height: 1.14rem; object-fit: contain; }
+
+body.layout-basic .baf-eve__pool-status {
+  margin-left: auto;
+  padding: 0.16rem 0.32rem;
+  border: 1px solid rgba(var(--baf-inert), 0.34);
+  border-radius: 2px;
+  color: rgba(var(--baf-flash), 0.4);
+  font: 800 0.46rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .baf-eve__pool small,
+body.layout-basic .baf-eve__mine small,
+body.layout-basic .baf-eve__board > header {
+  color: rgba(var(--baf-flash), 0.44);
+  font: 800 0.53rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.085em;
+}
+
+body.layout-basic .baf-eve__pool strong {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.4rem;
+  color: #d9f9e3;
+  font: 800 clamp(1.78rem, 3.3vw, 2.9rem)/0.92 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__pool strong b {
+  overflow: hidden;
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+body.layout-basic .baf-eve__pool strong em {
+  color: rgba(var(--baf-cash), 0.6);
+  font: 800 0.66rem/1 "Inter", system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.05em;
+}
+
+body.layout-basic .baf-eve__pool > footer > span,
+body.layout-basic .baf-eve__pool > footer > i {
+  color: rgba(var(--baf-flash), 0.36);
+  font: 700 0.5rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-style: normal;
+  letter-spacing: 0.02em;
+}
+
+body.layout-basic .baf-eve__pool > footer > i {
+  padding-left: 0.4rem;
+  border-left: 1px solid rgba(var(--baf-inert), 0.28);
+}
+
+/* The split bar: four lanes at the width the contract actually pays them. */
+body.layout-basic .baf-eve__split {
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+body.layout-basic .baf-eve__split-bar {
+  display: flex;
+  overflow: hidden;
+  height: 0.34rem;
+  gap: 1px;
+  border-radius: 1px;
+}
+
+body.layout-basic .baf-eve__split-bar i {
+  flex: var(--w) 1 0;
+  min-width: 0;
+}
+
+body.layout-basic .baf-eve__split-key {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 0.1rem 0.52rem;
+}
+
+body.layout-basic .baf-eve__split-key b {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.24rem;
+  color: rgba(var(--baf-flash), 0.4);
+  font: 700 0.47rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__split-key u {
+  display: block;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 50%;
+  text-decoration: none;
+}
+
+/* Score-gated lanes carry the blast colour; ungated lanes stay inert. The two
+   gated lanes are 80% of the pool — the bar is the argument for arming. */
+body.layout-basic .baf-eve__split-bar i[data-slice="scatter"],
+body.layout-basic .baf-eve__split-key b[data-slice="scatter"] u {
+  background: rgba(var(--baf-arc), 0.5);
+}
+
+body.layout-basic .baf-eve__split-bar i[data-slice="far"],
+body.layout-basic .baf-eve__split-key b[data-slice="far"] u {
+  background: rgba(var(--baf-arc), 0.28);
+}
+
+body.layout-basic .baf-eve__split-bar i[data-slice="rank"],
+body.layout-basic .baf-eve__split-key b[data-slice="rank"] u {
+  background: rgba(var(--baf-inert), 0.62);
+}
+
+body.layout-basic .baf-eve__split-bar i[data-slice="raffle"],
+body.layout-basic .baf-eve__split-key b[data-slice="raffle"] u {
+  background: rgba(var(--baf-inert), 0.36);
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__split-bar i[data-slice="scatter"],
+body.layout-basic .baf-eve.is-armed .baf-eve__split-key b[data-slice="scatter"] u {
+  background: rgb(var(--baf-arc));
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__split-bar i[data-slice="far"],
+body.layout-basic .baf-eve.is-armed .baf-eve__split-key b[data-slice="far"] u {
+  background: rgba(var(--baf-arc), 0.58);
+}
+
+body.layout-basic .baf-eve__split-key b[data-slice="scatter"],
+body.layout-basic .baf-eve__split-key b[data-slice="far"] {
+  color: rgba(var(--baf-flash), 0.62);
+}
+
+/* ------------------------------------------------------------------ */
+/* The gate — the rail's one decisive bit                              */
+/* ------------------------------------------------------------------ */
+
+body.layout-basic .baf-eve__mine {
+  gap: 0.2rem;
+  padding: 0.58rem 0.66rem;
+  border-color: rgba(var(--baf-inert), 0.34);
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__mine {
+  border-color: rgba(var(--baf-arc), 0.52);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(var(--baf-deep), 0.26), transparent 62%),
+    linear-gradient(170deg, rgba(var(--baf-arc), 0.09), rgba(0, 0, 0, 0.3));
+}
+
+/* The score is the number that decides eligibility, so it is the number that
+   is set large. No state word: the figure and its note carry the meaning. */
+body.layout-basic .baf-eve__gate-score {
+  overflow: hidden;
+  color: rgba(var(--baf-flash), 0.72);
+  font: 800 clamp(1.02rem, 1.72vw, 1.44rem)/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__gate-score { color: rgb(var(--baf-flash)); }
+
+body.layout-basic .baf-eve__gate-rank {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.3rem;
+  overflow: hidden;
+}
+
+body.layout-basic .baf-eve__gate-rank b {
+  color: rgba(var(--baf-flash), 0.8);
+  font: 800 0.68rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+body.layout-basic .baf-eve.is-armed .baf-eve__gate-rank b { color: rgb(var(--baf-arc)); }
+
+body.layout-basic .baf-eve__gate-rank i {
+  overflow: hidden;
+  color: rgba(var(--baf-flash), 0.36);
+  font: 700 0.5rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__gate-note {
+  overflow: hidden;
+  color: rgba(var(--baf-flash), 0.3);
+  font: 700 0.47rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.045em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* Top 4 — 15% of the pool, sized accordingly                          */
+/* ------------------------------------------------------------------ */
+
+body.layout-basic .baf-eve__board {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 0.26rem;
+  padding: 0.3rem 0.05rem 0.3rem 0.56rem;
+  border-left: 1px solid rgba(var(--baf-inert), 0.2);
+}
+
+body.layout-basic .baf-eve__board > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.12rem;
+}
+
+body.layout-basic .baf-eve__board > header strong {
+  color: rgba(var(--baf-flash), 0.66);
+  font: 800 0.55rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+
+body.layout-basic .baf-eve__board > header span {
+  overflow: hidden;
+  color: rgba(var(--baf-flash), 0.32);
+  font: 700 0.49rem/1 "Roboto Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* States the board's real weight, so four ranked cards cannot read as the
+   whole prize when the contract pays them 10% + 5%. */
+body.layout-basic .baf-eve__board-note {
+  margin: 0;
+  padding: 0 0.12rem;
+  overflow: hidden;
+  color: rgba(var(--baf-flash), 0.26);
+  font: 700 0.45rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A vertical list, not four squeezed cards: it gives the player a face and a
+   name to read, and the score column stays aligned enough to compare down. */
+body.layout-basic .baf-eve__leaders {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.layout-basic .baf-eve__leaders li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.85rem 0.95rem minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.26rem;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+body.layout-basic .baf-eve__place {
+  color: rgba(var(--baf-flash), 0.34);
+  font: 800 0.48rem/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+body.layout-basic .baf-eve__avatar {
+  display: grid;
+  width: 0.95rem;
+  height: 0.95rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(var(--baf-deep), 0.5);
+  object-fit: cover;
+}
+
+body.layout-basic .baf-eve__avatar.is-fallback {
+  color: rgba(var(--baf-flash), 0.5);
+  font: 800 0.46rem/1 "Inter", system-ui, sans-serif;
+}
+
+body.layout-basic .baf-eve__leader-copy {
+  display: grid;
+  min-width: 0;
+}
+
+body.layout-basic .baf-eve__leader-copy small {
+  overflow: hidden;
+  color: rgba(var(--baf-flash), 0.62);
+  font: 700 0.55rem/1.1 "Inter", system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__leaders li > strong {
+  color: rgba(var(--baf-flash), 0.88);
+  font: 800 0.66rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* Rank 1 gets a rule, not a gold card: it is 10% of the pool, not the story. */
+body.layout-basic .baf-eve__leaders li[data-rank="1"] {
+  background: rgba(var(--baf-flash), 0.07);
+}
+
+body.layout-basic .baf-eve__leaders li[data-rank="1"] .baf-eve__place,
+body.layout-basic .baf-eve__leaders li[data-rank="1"] > strong {
+  color: rgb(var(--baf-flash));
+}
+
+body.layout-basic .baf-eve__leaders li.is-you {
+  box-shadow: inset 0 0 0 1px rgba(var(--baf-arc), 0.55);
+}
+
+body.layout-basic .baf-eve__leaders li.is-you .baf-eve__leader-copy small::after {
+  margin-left: 0.34rem;
+  color: rgb(var(--baf-arc));
+  font: 900 0.42rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  content: 'YOU';
+}
+
+body.layout-basic .baf-eve__leaders li.is-empty { opacity: 0.3; }
+
+/* The final-day 5% is an amount-weighted draw, so it reads as a ticket, not a
+   podium place: dashed edge, chance framing, money green for the stake. */
+body.layout-basic .baf-eve__daily-flip {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 0.34rem;
+  padding: 0.3rem 0.36rem;
+  overflow: hidden;
+  border: 1px dashed rgba(var(--baf-cash), 0.4);
+  border-radius: 2px;
+  background: rgba(var(--baf-cash), 0.045);
+}
+
+body.layout-basic .baf-eve__daily-flip .baf-eve__place {
+  color: rgba(var(--baf-cash), 0.9);
+  font-size: 0.5rem;
+}
+
+body.layout-basic .baf-eve__daily-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  max-width: 100%;
+  align-items: baseline;
+  gap: 0.16rem 0.42rem;
+}
+
+body.layout-basic .baf-eve__daily-copy small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: rgba(var(--baf-cash), 0.66);
+  font: 800 0.44rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__daily-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #dcfce7;
+  font: 800 0.55rem/1 "Roboto Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__daily-copy > span {
+  color: rgba(var(--baf-cash), 0.85);
+  font: 800 0.49rem/1 "Roboto Mono", ui-monospace, monospace;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__daily-mine {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.14rem 0.42rem;
+  padding-top: 0.26rem;
+  border-top: 1px solid rgba(var(--baf-cash), 0.2);
+}
+
+body.layout-basic .baf-eve__daily-mine small {
+  grid-column: 1 / -1;
+  color: rgba(var(--baf-flash), 0.46);
+  font: 800 0.43rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.065em;
+}
+
+body.layout-basic .baf-eve__daily-mine strong,
+body.layout-basic .baf-eve__daily-mine b {
+  overflow: hidden;
+  color: #d9fff5;
+  font: 900 0.58rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__daily-mine b {
+  color: rgb(var(--baf-cash));
+  font-size: 0.63rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                          */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 1010px) {
+  body.layout-basic .baf-eve {
+    grid-template-columns: minmax(11rem, 0.9fr) minmax(15rem, 1.7fr) minmax(8rem, 0.8fr);
+  }
+  body.layout-basic .baf-eve__board {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 0.46rem 0.1rem 0.08rem;
+    border-top: 1px solid rgba(var(--baf-inert), 0.2);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  body.layout-basic .baf-eve {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.6rem 0.58rem 1.4rem;
+  }
+  body.layout-basic .baf-eve__pool {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-height: 5.6rem;
+  }
+  body.layout-basic .baf-eve__identity {
+    grid-column: 1;
+    grid-row: 2;
+    border-right: 0;
+  }
+  body.layout-basic .baf-eve__mine {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  body.layout-basic .baf-eve__board { grid-column: 1 / -1; grid-row: 3; }
+  body.layout-basic .baf-eve__band-label small { display: none; }
+}
+
+@media (max-width: 430px) {
+  body.layout-basic .baf-eve { grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic .baf-eve__pool { grid-column: 1; grid-row: 1; padding: 0.58rem 0.68rem; }
+  body.layout-basic .baf-eve__identity {
+    grid-column: 1;
+    grid-row: 2;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    gap: 0.46rem;
+  }
+  body.layout-basic .baf-eve__mark { width: 2.5rem; height: 2.5rem; }
+  body.layout-basic .baf-eve__mine {
+    grid-column: 1;
+    grid-row: 3;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.2rem 0.6rem;
+  }
+  body.layout-basic .baf-eve__mine small { grid-column: 1 / -1; }
+  body.layout-basic .baf-eve__gate-rank { text-align: right; }
+  body.layout-basic .baf-eve__board { grid-row: 4; }
+  body.layout-basic .baf-eve__split-key b:nth-child(n + 3) { display: none; }
+}
+
+/* No motion by design: this rail is a readout, not a show. Nothing here
+   animates or transitions, so there is no reduced-motion case to handle. */
