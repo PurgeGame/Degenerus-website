@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 56" role="img" aria-labelledby="title">
+  <title id="title">Whale</title>
+  <path d="M48 30c6 0 9-5 9-12 5 1 8 4 9 8l3-1c0 9-6 15-15 15-5 8-14 12-25 12C14 52 4 43 4 32c0-10 8-17 19-17 13 0 20 6 25 15Z" fill="#67c6e8" stroke="#133c52" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M7 36c8 6 24 8 42 1-4 8-12 12-21 12-11 0-19-5-21-13Z" fill="#c2edf4"/>
+  <path d="m32 38 9 4-9 3Z" fill="#2587b2"/>
+  <circle cx="17" cy="29" r="2.5" fill="#133c52"/>
+  <path d="M25 11V4m-4 8-5-5m13 5 5-5" fill="none" stroke="#9fe5f4" stroke-width="3" stroke-linecap="round"/>
+</svg>
