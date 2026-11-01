@@ -695,23 +695,20 @@ body.layout-basic .link-trade :disabled { opacity: .5; cursor: default; }
   .link-trade__quote > div > output, .link-trade__quote strong { font-size: 1.05rem; }
 }
 
-/* The Incinerator pairs a small exact amount field with a full-width slider. */
+/* Whole-coin burn controls above a full-width slider. */
 body.layout-basic app-wwxrp-burn .pari-wwxrp {
-  grid-template-areas: "identity amount burn" "range range range";
-  grid-template-columns: minmax(0, 1fr) minmax(0, 7.5rem) auto;
+  grid-template-areas: "amount burn" "range range";
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   gap: .65rem .5rem;
   padding: .7rem;
 }
 body.layout-basic app-wwxrp-burn .pari-wwxrp__amount {
   width: 100%;
-  max-width: 7.5rem;
+  max-width: none;
 }
 body.layout-basic app-wwxrp-burn .pari-wwxrp__amount-control {
   grid-template-columns: minmax(0, 1fr) auto;
-}
-body.layout-basic app-wwxrp-burn .pari-wwxrp__identity > small {
-  white-space: normal;
 }
 .incinerator-prizes strong { color: #ffe1a0; font-weight: 750; }
 .incinerator-note { margin: -.35rem 0 .85rem; color: #a9989c; font: 500 .72rem/1.5 Inter, sans-serif; }
@@ -733,5 +730,5 @@ body.layout-basic .incinerator-range input[type="range"] {
   cursor: pointer;
 }
 body.layout-basic .incinerator-range input:disabled { opacity: .45; cursor: default; }
-body.layout-basic .incinerator-range input:focus-visible { outline: 2px solid #f6a5a7; outline-offset: 3px; }
+body.layout-basic .incinerator-range input:focus-visible { outline: none; filter: drop-shadow(0 0 4px #f6a5a7); }
 .incinerator-range__limits { display: flex; justify-content: space-between; gap: .5rem; color: #baa0a4; font: 600 .62rem/1.4 Inter, sans-serif; font-variant-numeric: tabular-nums; }
