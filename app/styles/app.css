@@ -19617,6 +19617,15 @@ body.layout-basic .dbb-stat strong em {
 }
 body.layout-basic .dbb-stat--prize { border-color: rgba(74, 222, 128, 0.25); background: linear-gradient(145deg, rgba(5, 71, 41, 0.35), rgba(4, 15, 13, 0.46)); }
 body.layout-basic .dbb-stat--prize strong { color: #86efac; text-shadow: 0 0 11px rgba(74, 222, 128, 0.22); }
+body.layout-basic .dbb-stat--prize { container-type: inline-size; }
+body.layout-basic .dbb-stat--prize > span { width: 100%; }
+body.layout-basic .dbb-stat--prize strong { flex-wrap: wrap; overflow: visible; row-gap: .15rem; }
+body.layout-basic .dbb-stat--prize strong b {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  font-size: min(var(--dbb-value-size), calc(100cqi / var(--dbb-prize-characters, 8) * 1.6));
+}
 body.layout-basic .dbb-stat--score {
   grid-area: score;
   border-color: rgba(251, 191, 36, 0.3);
