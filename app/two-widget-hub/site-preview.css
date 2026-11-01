@@ -805,5 +805,5 @@ body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicato
 .site-pool-payouts>span{position:absolute;left:0;right:0}
 .site-pool-payouts__guaranteed{bottom:var(--site-payout-min-base);height:var(--site-payout-guaranteed);background:linear-gradient(90deg,#166437,#299b53 50%,#196d3d);box-shadow:inset 0 1px #83d49a}
 .site-pool-payouts__possible{bottom:var(--site-payout-max-base);height:var(--site-payout-possible);background:linear-gradient(90deg,#7bb66a,#b5e69a 50%,#86c574);box-shadow:inset 0 1px #d6f3bd}
-.concept-track[data-scale="jackpot"]>div::before{background:#96d9a0;box-shadow:0 0 6px #67c77766}
+.concept-track>div::before{display:none}
 @media(prefers-reduced-motion:reduce){.site-pool-payouts{transition:none}}
