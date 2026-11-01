@@ -1575,7 +1575,7 @@
 .replay-bucket-whale{display:inline-flex;align-items:center;justify-content:center;gap:.16rem;font:850 clamp(.65rem,1.7vw,.88rem)/1.1 Inter,system-ui,sans-serif;color:#184b64;white-space:nowrap}
 .replay-bucket-whale img{width:clamp(1.4rem,4vw,2rem);height:clamp(1.1rem,3vw,1.6rem);object-fit:contain}
 .replay-prize-reveal.replay-bucket-reveal--whale{grid-template-rows:minmax(0,1fr) auto}
-.replay-bucket-reveal--whale .replay-bucket-receipt{height:auto;flex-flow:row wrap;justify-content:center;align-items:center;gap:.2rem .35rem}
+.replay-bucket-reveal--whale .replay-bucket-receipt{height:auto;flex-direction:column;justify-content:center;align-items:center;gap:.24rem}
 .replay-win-description__line--whale{color:#b5eafa}
 .replay-win-description__line--whale .replay-win-description__currency-icon{width:1.8em;height:1.3em}
 .replay-badge-reward-pop__row--whale-pass{color:#b5eafa}
@@ -1583,3 +1583,6 @@
 
 .replay-dist-whale{display:inline-flex;align-items:center;gap:.18rem;color:#b5eafa;font-weight:800;white-space:nowrap}
 .replay-dist-whale img{width:1.7rem;height:1.3rem;object-fit:contain}
+
+.replay-dist-tickets{display:inline-flex;align-items:center;gap:.18rem;color:#e8d6a0;font-weight:800;white-space:nowrap}
+.replay-dist-ticket-icon{width:1.4rem;height:1.1rem}
