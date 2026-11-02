@@ -1,0 +1,28 @@
+Thermometer texture artwork
+
+Generated with the built-in image_gen tool on 2026-11-01.
+
+Original: ethereum-facets-v1.png (1254 × 1254 RGB).
+Web delivery: ethereum-facets-v1.webp (same dimensions; WebP quality 82).
+The WebP is a format conversion of the original, not a retouched image.
+
+Recommended integration:
+- Static overlay on the liquid column; do not replace the payout-color gradients.
+- background-image: url('/app/assets/thermometer/ethereum-facets-v1.webp');
+- background-size: 156px 156px; background-position: center bottom; background-repeat: repeat;
+- mix-blend-mode: soft-light; opacity: 0.3; pointer-events: none;
+- Keep the fill's existing clipping/radius and height animation.
+- The 156px swatch size creates roughly 11px diamond cells inside the 26px tube.
+- A pseudo-element keeps the artwork separate from the dynamic payout bands; the existing ::before is explicitly hidden in site-preview.css, so use ::after or replace that rule deliberately.
+- These are visual recommendations, not applied code changes.
+
+Exact generation prompt:
+
+Use case: stylized-concept.
+Asset type: a square seamless repeating grayscale material texture for a narrow 26-pixel-wide vertical prize-pool thermometer in a premium dark casino game interface.
+Primary request: a subtle texture vaguely inspired by the faceted, elongated diamond geometry of the Ethereum symbol.
+Subject and composition: fill the entire square edge to edge with an evenly distributed delicate tessellation of small elongated vertical diamond crystals. Each diamond is built from paired triangular facets, with a narrow separation between upper and lower halves only occasionally suggested. Approximately 12 small diamonds across and 12 rows down. It should read first as refined engraved geometric material, with Ethereum only a secondary visual association. Keep the pattern regular enough to tile, with exact visual continuity across all four edges. Straight-on flat material swatch, no perspective.
+Style and material: understated satin graphite with very fine brushed-grain detail and crisp but quiet shallow etched triangular facets. Restrained two-dimensional surface relief, no chunky 3D gems.
+Lighting and palette: entirely neutral grayscale, a midgray base near 50 percent gray with facets varying gently from about 35 to 65 percent gray; very low contrast and uniform illumination, no global vignette or spotlight. This image will be blended softly over green and gold UI colors.
+Constraints: texture only. No text, letters, numbers, currency symbols, typography, borders, thermometer, gauge, liquid, device mockup, giant central logo, coins, glow, black background, or decorative frame. Opaque full-bleed 1024 by 1024 square.
+
