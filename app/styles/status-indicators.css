@@ -64,7 +64,18 @@
   outline-offset: 2px;
 }
 
+/* Phones (and wallet in-app browsers, which lose height to their own bars):
+   tighter tracking keeps the warning to one line instead of two. */
 @media (max-width: 420px) {
+  .testnet-beta-banner {
+    gap: 0.34rem;
+    padding: 0.25rem 0.4rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .testnet-beta-banner__faucet { letter-spacing: 0.03em; }
+}
+@media (max-width: 339px) {
   .testnet-beta-banner {
     flex-wrap: wrap;
     row-gap: 0.22rem;

@@ -807,3 +807,14 @@ body.layout-basic #site-buy-board .site-tile-indicators>quest-objective-indicato
 
 
 .concept-track>div::before{display:none}
+
+/* Uniform board scale (site-preview.js fit): each in-flow row lays out at the
+   1160px design width and zooms by --hub-zoom, so the composition keeps its
+   proportions at every window size. Popups stay outside the zoom. */
+@media(min-width:1100px){
+  body.layout-basic.hub-zoom[data-desktop-page="daily"]{--desktop-width:calc(1160px * var(--hub-zoom,1) + 32px)}
+  body.layout-basic.hub-zoom[data-desktop-page="daily"] #app-workspace>:is(gold-rush-headline,app-protocol-wallet-banner,app-eth-onramp,.jackpot-hero,app-jackpot-resolutions,.info-rail){
+    zoom:var(--hub-zoom,1);width:1160px!important;max-width:none!important;justify-self:center;
+  }
+  body.layout-basic.hub-zoom[data-desktop-page="daily"] #app-workspace>gold-rush-headline{height:128px!important}
+}
