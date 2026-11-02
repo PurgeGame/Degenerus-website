@@ -1,0 +1,2 @@
+var u=Object.defineProperty;var m=(n,r)=>u(n,"name",{value:r,configurable:!0});export function currencySelectionFrames(n,{speed:r=1,quick:o=!1}={}){const s=Math.max(.5,Math.min(3,Number(r)||1)),h=Math.max(0,Math.min(2,Number(n)||0)),a=o||s>1?[0,1,2,1,0]:[0,1,2,1,0,1,2,1,0];for(let t=1;t<=h;t++)a.push(t);const i=Math.max(o?650:780,(o?1e3:1450)/s),c=a.map((t,e)=>1+2*(e/(a.length-1))**2),l=c.reduce((t,e)=>t+e,0);return a.map((t,e)=>({index:t,dwell:Math.round(i*c[e]/l)}))}m(currencySelectionFrames,"currencySelectionFrames");
+//# sourceMappingURL=currency-selection.js.map

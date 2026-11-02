@@ -1,0 +1,2 @@
+(function(){if(new URLSearchParams(window.location.search).get("tutorial")!=="1")return;const a=window.setInterval,t=window.clearInterval,n=new Set;let r=!1;window.setInterval=function(e,o,...w){const l=a.call(window,e,o,...w);return n.add(l),l},window.clearInterval=function(e){return n.delete(e),t.call(window,e)},window.__DEGENERUS_TUTORIAL_FREEZE__=Object.freeze({freeze(){if(!r){r=!0;for(const e of n)t.call(window,e);n.clear(),window.setInterval=a,window.clearInterval=t}}})})();
+//# sourceMappingURL=tutorial-frame-freeze.js.map

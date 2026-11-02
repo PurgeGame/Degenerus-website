@@ -1,0 +1,15 @@
+var h=Object.defineProperty;var o=(a,i)=>h(a,"name",{value:i,configurable:!0});export function mobileEventMarkup(a,{id:i,title:t,mark:e,action:c,content:s}){return a.hasAttribute("data-mpage")?`
+    <button type="button" class="mobile-event-summary" data-event="${i}"
+            aria-haspopup="dialog" aria-controls="${i}-mobile-details" aria-expanded="false">
+      <img class="mobile-event-summary__mark" src="${e}" alt="">
+      <span class="mobile-event-summary__copy"><strong>${t}</strong><small data-event-meta>—</small></span>
+      <span class="mobile-event-summary__pool"><strong data-event-pool>—</strong><small>ETH POOL</small></span>
+      <span class="mobile-event-summary__action">${c}<b aria-hidden="true">›</b></span>
+    </button>
+    <dialog class="mobile-event-sheet" id="${i}-mobile-details" aria-label="${t}">
+      <header class="mobile-event-sheet__header"><strong>${t}</strong>
+        <button type="button" class="mobile-event-sheet__close" aria-label="Close ${t}" autofocus>×</button>
+      </header>
+      <div class="mobile-event-sheet__body">${s}</div>
+    </dialog>`:s}o(mobileEventMarkup,"mobileEventMarkup");export function mountMobileEventSheet(a,{inlineDesktop:i=!1}={}){const t=a.querySelector(".mobile-event-summary");if(!t)return null;const e=a.querySelector(".mobile-event-sheet"),c=a.querySelector(".mobile-event-sheet__close"),s=window.matchMedia("(max-width: 1099px)"),d=o(()=>s.matches||!i&&!!(document.body.dataset.desktopPage&&a.closest(".desktop-activity")),"compact"),l=o(()=>{d()&&e.open&&(e.close(),t.setAttribute("aria-expanded","false"))},"close"),m=o(()=>{!d()||a.hidden||e.open||(e.showModal(),t.setAttribute("aria-expanded","true"))},"open"),p=o(()=>t.setAttribute("aria-expanded",String(d()&&e.open)),"onClose"),v=o(n=>{if(n.target!==e)return;const r=e.getBoundingClientRect();(n.clientX<r.left||n.clientX>r.right||n.clientY<r.top||n.clientY>r.bottom)&&l()},"onBackdrop"),b=o(n=>{s.matches&&n.detail?.page!=="flip"&&l()},"onPage"),g=o(n=>{!s.matches&&n.detail?.slide!==a.dataset.infoSlide&&l()},"onDesktopInfo"),u=o(()=>{e.open&&e.close(),t.setAttribute("aria-expanded","false"),d()?e.removeAttribute("role"):(e.setAttribute("role","presentation"),e.show())},"syncMode");return t.addEventListener("click",m),c.addEventListener("click",l),e.addEventListener("close",p),e.addEventListener("click",v),s.addEventListener("change",u),document.addEventListener("mobile-pager:change",b),document.addEventListener("desktop-info:change",g),u(),{open:m,update({visible:n,pool:r,meta:f}){n||l(),r!=null&&(t.querySelector("[data-event-pool]").textContent=r),f!=null&&(t.querySelector("[data-event-meta]").textContent=f)},destroy(){e.open&&e.close(),t.removeEventListener("click",m),c.removeEventListener("click",l),e.removeEventListener("close",p),e.removeEventListener("click",v),s.removeEventListener("change",u),document.removeEventListener("mobile-pager:change",b),document.removeEventListener("desktop-info:change",g)}}}o(mountMobileEventSheet,"mountMobileEventSheet");
+//# sourceMappingURL=mobile-event-sheet.js.map

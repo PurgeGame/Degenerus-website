@@ -1,0 +1,2 @@
+var p=Object.defineProperty;var n=(t,e)=>p(t,"name",{value:e,configurable:!0});export const GOLD_SIX_TRAIT_ID=253,GOLD_SIX_MONKEY_BADGE="/app/assets/jackpot/gold-six-monkey-v1.svg";export function isGoldSix(t,e,r){return Number(t)===3&&Number(e)===5&&Number(r)===7}n(isGoldSix,"isGoldSix");export function previewSpinTrait(t,e,r,{symbolLocked:s=!1,colorLocked:i=!1}={}){return!isGoldSix(t,e,r)||s&&i?{sym:e,col:r}:s?{sym:e,col:6}:{sym:6,col:r}}n(previewSpinTrait,"previewSpinTrait");
+//# sourceMappingURL=gold-six.js.map

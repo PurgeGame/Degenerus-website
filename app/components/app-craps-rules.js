@@ -240,7 +240,7 @@ var o=Object.defineProperty;var a=(t,r)=>o(t,"name",{value:r,configurable:!0});e
       >
         <header class="craps-rules__head">
           <h2 id="craps-rules-title"><span>HOW TO PLAY</span>
-            <img class="craps-rules__logo" src="/app/assets/craps/craps-autobattle-integrated-swords-v9.webp" width="2025" height="466" alt="Craps Autobattle">
+            <img class="craps-rules__logo" loading="lazy" src="/app/assets/craps/craps-autobattle-integrated-swords-v9-w1100.webp" width="2025" height="466" alt="Craps Autobattle">
           </h2>
           <button class="craps-rules__close" type="button" aria-label="Close Craps rules">&times;</button>
           <ol id="craps-rules-summary">

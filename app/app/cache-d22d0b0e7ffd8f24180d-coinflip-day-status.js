@@ -1,0 +1,2 @@
+var i=Object.defineProperty;var e=(t,f)=>i(t,"name",{value:f,configurable:!0});import{fetchJSON as o}from"./api.js";let n=o;export function fetchCoinflipDayJSON(t){return n(t)}e(fetchCoinflipDayJSON,"fetchCoinflipDayJSON");export function __setCoinflipDayStatusFetcherForTest(t){n=typeof t=="function"?t:o}e(__setCoinflipDayStatusFetcherForTest,"__setCoinflipDayStatusFetcherForTest");export function __resetCoinflipDayStatusFetcherForTest(){n=o}e(__resetCoinflipDayStatusFetcherForTest,"__resetCoinflipDayStatusFetcherForTest");
+//# sourceMappingURL=coinflip-day-status.js.map

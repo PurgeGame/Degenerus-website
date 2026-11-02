@@ -1,0 +1,2 @@
+var f=Object.defineProperty;var c=(n,r)=>f(n,"name",{value:r,configurable:!0});function a(n){try{return BigInt(n??0)}catch{return 0n}}c(a,"_safeBigInt");export function projectDegeneretteEthSplit({gross:n,total:r,lootboxEth:u}={}){const o=a(n),t=a(r),e=a(u);if(o<=0n)return{actual:0n,lootbox:0n};if(t<=0n||e<=0n)return{actual:o,lootbox:0n};const i=e>t?t:e,l=o>t?t:o,s=l===t?i:i*l/t;return{actual:o-s,lootbox:s}}c(projectDegeneretteEthSplit,"projectDegeneretteEthSplit");
+//# sourceMappingURL=reveal-projection.js.map

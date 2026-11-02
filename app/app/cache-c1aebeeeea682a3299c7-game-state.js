@@ -1,0 +1,2 @@
+var t=Object.defineProperty;var n=(e,r)=>t(e,"name",{value:r,configurable:!0});import{get as c}from"./store.js";import{fetchJSON as u}from"./api.js";export async function readGameState({fresh:e=!1}={}){if(!e){const r=c("app.gameState");if(r)return r}return u("/game/state").catch(()=>null)}n(readGameState,"readGameState");export function gameDay(e){const r=e?.phaseCurrentDay??e?.dailyIdx??e?.currentDay??e?.dailyRng?.day??null,a=Number(r);return Number.isInteger(a)&&a>0?a:null}n(gameDay,"gameDay");
+//# sourceMappingURL=game-state.js.map

@@ -1,0 +1,2 @@
+var a=Object.defineProperty;var o=(t,r)=>a(t,"name",{value:r,configurable:!0});import{fetchJSON as n}from"./api.js";import{crapsWinnerTotalsFromPayload as s}from"./craps.js";export async function readCrapsWinnerTotals(t,r=n){const e=Number(t);return!Number.isInteger(e)||e<=0||typeof r!="function"?Object.freeze([]):s(e,await r("/game/craps/lobby/"+e+"/results"))}o(readCrapsWinnerTotals,"readCrapsWinnerTotals");
+//# sourceMappingURL=craps-results.js.map

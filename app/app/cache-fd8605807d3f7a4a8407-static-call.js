@@ -1,0 +1,2 @@
+var l=Object.defineProperty;var o=(r,t)=>l(r,"name",{value:t,configurable:!0});import{ensureWriteChain as u,getProvider as a}from"./contracts.js";export async function requireStaticCall(r,t,c=[],s=null){try{let e=s;if(e){const n=a();if(n){await u();const i=a();i&&i!==n&&(e=await i.getSigner())}}return{ok:!0,simResult:await(e?r.connect(e):r)[t].staticCall(...c)}}catch(e){return{ok:!1,error:e}}}o(requireStaticCall,"requireStaticCall");
+//# sourceMappingURL=static-call.js.map

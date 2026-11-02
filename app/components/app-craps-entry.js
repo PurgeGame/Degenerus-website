@@ -7,16 +7,16 @@ BATTLE`,shortLabel:w,detail:S,icon:"/badges-circular/dice_04_5_silver.svg",iconB
               <section class="craps-entry__identity craps-entry__identity--craps"
                        aria-label="Craps Autobattle, added FLIP per day unavailable">
                 <h2 class="craps-entry__craps-logo" id="craps-entry-title">
-                  <img class="craps-entry__craps-lockup" src="/app/assets/craps/craps-autobattle-integrated-swords-v9.webp" width="2025" height="466"
-                       srcset="/app/assets/craps/craps-autobattle-integrated-swords-v9-w560.webp 560w, /app/assets/craps/craps-autobattle-integrated-swords-v9.webp 2025w" sizes="(max-width: 768px) 44vw, 2025px"
+                  <img class="craps-entry__craps-lockup" src="/app/assets/craps/craps-autobattle-integrated-swords-v9-w1100.webp" width="2025" height="466"
+                       srcset="/app/assets/craps/craps-autobattle-integrated-swords-v9-w560.webp 560w, /app/assets/craps/craps-autobattle-integrated-swords-v9-w1100.webp 1100w" sizes="(max-width: 768px) 44vw, 260px"
                        loading="lazy" decoding="async" alt="CRAPS AUTO BATTLE bookended by silver and blue dice badges, with crossed swords between AUTO and BATTLE">
                 </h2>
               </section>
               <section class="craps-entry__identity craps-entry__identity--runup" aria-label="Run It Up Progressive Jackpot">
                 <span class="craps-entry__run-it-up-mark" aria-hidden="true">
                   <span class="craps-entry__runup-kicker">FEATURING THE</span>
-                  <img src="/app/assets/craps/run-it-up-progressive-jackpot-logo-v2.webp" width="1400" height="517"
-                       srcset="/app/assets/craps/run-it-up-progressive-jackpot-logo-v2-w400.webp 400w, /app/assets/craps/run-it-up-progressive-jackpot-logo-v2.webp 1400w" sizes="(max-width: 768px) 31vw, 1400px"
+                  <img src="/app/assets/craps/run-it-up-progressive-jackpot-logo-v2-w800.webp" width="1400" height="517"
+                       srcset="/app/assets/craps/run-it-up-progressive-jackpot-logo-v2-w400.webp 400w, /app/assets/craps/run-it-up-progressive-jackpot-logo-v2-w800.webp 800w" sizes="(max-width: 768px) 31vw, 180px"
                        loading="lazy" decoding="async" alt="">
                 </span>
                 <span class="craps-entry__runup-submark" aria-hidden="true">PROGRESSIVE JACKPOT</span>

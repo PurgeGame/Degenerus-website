@@ -1,0 +1,2 @@
+var f=Object.defineProperty;var e=(t,r)=>f(t,"name",{value:r,configurable:!0});import{fetchJSON as n}from"./api.js";let o=n;export function fetchCrapsEventsJSON(t){return o(t)}e(fetchCrapsEventsJSON,"fetchCrapsEventsJSON");export function __setCrapsEventsTransportForTest(t){o=typeof t=="function"?t:n}e(__setCrapsEventsTransportForTest,"__setCrapsEventsTransportForTest");
+//# sourceMappingURL=craps-events.js.map
