@@ -7,10 +7,14 @@
 //                 value <= uint160.max to that address); left-padded to bytes32.
 //   0x + 64 hex — an already-encoded bytes32 code (padded address or a
 //                 registered vanity code, e.g. from buildAffiliateUrl).
+//   1-10 digits — a wallet ID (`?ref=42`), the default code of any player who
+//                 has one (audit d082e68f4). Stored as the left-aligned ASCII
+//                 bytes32 that DegenerusAffiliate resolves to that account.
 //   name.eth    — an ENS name (subdomains fine). Resolved on-chain at capture
 //                 time to its address record and stored as the padded address,
 //                 identical to the 40-hex path from that point on.
-// Typed vanity strings (?ref=DEGEN) are deliberately NOT accepted: purchasing
+// Typed vanity strings (?ref=DEGEN) are deliberately NOT accepted (an all-digit
+// wallet ID is not a vanity string: custom codes must contain a letter): purchasing
 // with an unregistered code permanently locks the buyer's referrer slot to
 // no-referrer, so only exact on-chain-safe formats are captured. ENS names are
 // NEVER interpreted as vanity codes (a squatter could register the string
@@ -53,6 +57,14 @@
     raw = raw.trim().toLowerCase();
     if (/^0x[0-9a-f]{40}$/.test(raw)) return '0x' + '0'.repeat(24) + raw.slice(2);
     if (B32.test(raw)) return raw;
+    if (/^[0-9]{1,10}$/.test(raw)) {
+      var id = raw.replace(/^0+/, '');
+      // uint32, never 0; ten digits compare lexically once lengths match.
+      if (!id || (id.length === 10 && id > '4294967295')) return null;
+      var hex = '';
+      for (var i = 0; i < id.length; i++) hex += id.charCodeAt(i).toString(16);
+      return '0x' + hex + '0'.repeat(64 - hex.length);
+    }
     return null;
   }
 

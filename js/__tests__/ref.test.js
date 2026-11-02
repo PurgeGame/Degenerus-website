@@ -180,6 +180,19 @@ describe('capture behavior', () => {
     assert.equal(globalThis.localStorage.getItem('affiliate-ref'), other);
   });
 
+  test('wallet ID stores its left-aligned decimal ASCII bytes32, no network', async () => {
+    await loadRef({ search: '?ref=42' });
+    assert.equal(globalThis.localStorage.getItem('affiliate-ref'), '0x3432' + '0'.repeat(60));
+    assert.equal(globalThis.fetchCalls.length, 0);
+  });
+
+  test('wallet ID 0 and IDs above uint32 are rejected', async () => {
+    await loadRef({ search: '?ref=0' });
+    assert.equal(globalThis.localStorage.getItem('affiliate-ref'), null);
+    await loadRef({ search: '?ref=4294967296' });
+    assert.equal(globalThis.localStorage.getItem('affiliate-ref'), null);
+  });
+
   test('vanity strings still rejected, nothing stored, no network', async () => {
     await loadRef({ search: '?ref=DEGEN' });
     assert.equal(globalThis.localStorage.getItem('affiliate-ref'), null);
