@@ -292,8 +292,8 @@
 "/app/app/reveal-preparation.js":"/app/app/cache-c3bca1f7c08b8251b9fe-reveal-preparation.js",
 "/app/app/router.js":"/app/app/cache-5092794a639b1da9e30e-router.js",
 "/app/app/router.js?v=default-view-1":"/app/app/cache-5092794a639b1da9e30e-router.js",
-"/app/app/rpc-transport.js":"/app/app/cache-5d837b1716cf13548176-rpc-transport.js",
-"/app/app/rpc-transport.js?v=snappy-mobile-20261028":"/app/app/cache-5d837b1716cf13548176-rpc-transport.js",
+"/app/app/rpc-transport.js":"/app/app/cache-73190726c60023265703-rpc-transport.js",
+"/app/app/rpc-transport.js?v=snappy-mobile-20261028":"/app/app/cache-73190726c60023265703-rpc-transport.js",
 "/app/app/sacrifices.js":"/app/app/cache-abd1faa035d1f864dcf0-sacrifices.js",
 "/app/app/sacrifices.js?v=larger-flames-20261002":"/app/app/cache-abd1faa035d1f864dcf0-sacrifices.js",
 "/app/app/scaling.js":"/app/app/cache-94ef1cd45d5f2b26ca5c-scaling.js",
@@ -1117,6 +1117,9 @@
   <script type="module" src="/app/two-widget-hub/cache-9f877033afd5a7b8275f-site-hub.js"></script>
   <script type="module">
     import { mountPanelPopups } from "/app/app/panel-popups.js";
+    import { hasPendingApiReads } from "/app/app/api.js";
+    import { hasPendingRpcReads } from "/app/app/rpc-transport.js";
+    import { isMajorDrawActive } from "/app/app/major-draw-activity.js";
     mountPanelPopups();
     // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
     //
@@ -1265,6 +1268,7 @@
       : '';
     const styleLoads = new Map();
     const moduleLoads = new Map();
+    let pendingModuleLoads = 0;
     const modulePreloads = new Set();
     const preloadModule = (src) => {
       if (modulePreloads.has(src)) return;
@@ -1293,6 +1297,7 @@
       // Fetch/parse code alongside its stylesheet, then upgrade only when the
       // CSS is ready. Hidden panels do not execute or start their data polls.
       preloadModule(src);
+      pendingModuleLoads += 1;
       const loaded = (async () => {
         await Promise.all((MODULE_STYLES.get(src) || []).map(loadStyle));
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1309,7 +1314,7 @@
             await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
           }
         }
-      })();
+      })().finally(() => { pendingModuleLoads -= 1; });
       moduleLoads.set(src, loaded);
       // Retain the final result so viewport and idle callers share the same
       // bounded retry sequence, including when the network remains offline.
@@ -1360,11 +1365,11 @@
       if (document.readyState === 'complete') schedule();
       else window.addEventListener('load', schedule, { once: true });
     };
-    const loadInBatches = (sources) => {
+    const loadInBatches = (sources) => new Promise(resolve => {
       const pending = [...new Set(sources)].filter(moduleNeededInBackground);
       const batchSize = window.matchMedia('(max-width: 1099px)').matches ? 1 : 2;
       const next = () => {
-        if (pending.length === 0) return;
+        if (pending.length === 0) { resolve(); return; }
         const batch = pending.splice(0, batchSize).filter(moduleNeededInBackground);
         void Promise.allSettled(batch.map(importModule))
           .then((results) => {
@@ -1377,6 +1382,30 @@
           });
       };
       next();
+    });
+
+    // Warm the hidden balances strip once, after visible panels and their reads
+    // settle. Importing upgrades each host and starts its normal account-scoped
+    // data load. Share the on-demand loader so opening the strip never repeats
+    // work already started here (and never has to wait for an idle slot).
+    const TOKEN_TOOL_MODULES = [
+      '/app/components/app-token-funds.js',
+      '/app/components/app-wwxrp-burn.js',
+      '/app/components/app-sdgnrs-burn-rail.js',
+    ];
+    const warmTokenTools = () => {
+      const next = TOKEN_TOOL_MODULES.find(src => !moduleLoads.has(src));
+      if (!next) return;
+      const later = () => setTimeout(() => idle(warmTokenTools), 1000);
+      if (document.readyState !== 'complete' || document.visibilityState === 'hidden'
+        || pendingModuleLoads > 0 || hasPendingApiReads() || hasPendingRpcReads()
+        || isMajorDrawActive() || navigator.scheduling?.isInputPending?.()) {
+        later();
+        return;
+      }
+      void importModule(next)
+        .catch(error => reportModuleFailure(next, error))
+        .finally(later);
     };
 
     // Desktop exposes every hero column at once. Phones request each large
@@ -1450,7 +1479,7 @@
       ...INFO_MODULES,
       ...IDLE_MODULES,
       ...LAZY_PANELS.map(([, src]) => src),
-    ]));
+    ]).then(() => idle(warmTokenTools)));
   </script>
 <script type="module" src="/app/two-widget-hub/cache-c6395abb2a8b1f1d333d-site-preview.js"></script></body>
 </html>
