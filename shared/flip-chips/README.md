@@ -14,6 +14,7 @@ coin, never recolors — a coin with red on top does not exist.
 | `face.svg` | 120×120 | Top-down chip icon: the split flame logo with a milled coin rim. Buttons, compact "FLIP as a chip" marks. |
 | `coin.svg` | 120×64 | THE FLIP coin in 3/4 view, logo orientation. Visible wall band = 16/64 = 25% of image height (transparent padding below). |
 | `coin-spun.svg` | 120×64 | The same coin given a spin on the felt (face art rotated −22°, wall seam recomputed to match). Use for pile variety. |
+| `coin-turned.svg` / `coin-turned-spun.svg` | 120×64 | Clockwise 90°/112° turns for the other two wager-chip orientations. The flame and colored halves rotate together, with matching wall seams. |
 | `coin-high-red.svg` / `coin-high-green.svg` | 120×90 | The same coin at a higher tabletop angle for readable player markers. `red` and `green` name which half faces the viewer; they are 0°/180° orientations, not recolors. |
 | `stack-2-high-{red,green}.svg` … `stack-10-high-{red,green}.svg` | 120×101 … 120×189 | Matching 2–10 chip dealer stacks at the higher angle. Each column holds one 0° red-facing or 180° green-facing turn, so its face and wall seams align physically from base to top. |
 | `coin-high-{gold,silver}.svg` and `stack-N-high-{gold,silver}.svg` | Same as high-angle set | Temporary shooter-boost skin of the exact table geometry, with brushed faces, directional reflections, polished bevels, and milled gold/silver walls. Gold faces the local rail; silver faces opponents by swapping the material halves while keeping the directional FLIP flame upright. These indicate settled boost eligibility and are never used as ordinary FLIP denominations. |
@@ -37,7 +38,9 @@ layer N absolutely-positioned elements with
 `background: url('/shared/flip-chips/coin.svg') center / 100% 100% no-repeat`,
 raising each by **25% of the coin's rendered height** (the wall-band fraction:
 equal rise gives every coin an identical visible band; never exceed 26% or
-buried faces peek out). Alternate `coin.svg` / `coin-spun.svg` per pile. Add
+buried faces peek out). Choose among `coin.svg`, `coin-spun.svg`,
+`coin-turned.svg`, and `coin-turned-spun.svg` for each chip. Never mirror a chip
+with CSS: that reverses the asymmetric flame instead of turning it. Add
 depth with `filter: drop-shadow(...)` — contact shadows are intentionally not
 baked into the assets.
 
@@ -47,6 +50,8 @@ Escalate presentation with the amount the way the app does
 (piles, the stack ladder, and `pile-ladder.css`) with
 `python3 shared/flip-chips/build-piles.py`, then splice the css between the
 AUTO-PILES markers in `coinflip-chipset.css`.
+Rebuild just the two turned single coins with
+`python3 shared/flip-chips/build-piles.py --coins-only`.
 
 Keep rendered aspects at the native ratios or the ellipses distort. Brand
 tones live in the art: green `#30d100`, red `#ed0e11`.
